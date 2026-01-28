@@ -1,4 +1,48 @@
-# Ansible tasks (playbook execution)
 version: '3'
 
-tasks: {}
+vars:
+  INVENTORY: '{{.INVENTORY | default "./inventories/test/hosts.yml"}}'
+
+tasks:
+  lint:
+    desc: Run ansible-lint on roles and playbooks
+    cmds:
+      - uv run ansible-lint roles/ playbooks/
+
+  ping:
+    desc: Ping all hosts in inventory
+    cmds:
+      - uv run ansible -i {{.INVENTORY}} all -m ping
+
+  facts:
+    desc: Gather facts from all hosts
+    cmds:
+      - uv run ansible -i {{.INVENTORY}} all -m setup
+
+  deploy:
+    desc: Deploy Kafka cluster
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml
+    preconditions:
+      - test -f {{.INVENTORY}}
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+
+  verify:
+    desc: Verify Kafka cluster deployment
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+
+  deploy:prod:
+    desc: Deploy to production (requires confirmation)
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
+    prompt: "Deploy to PRODUCTION? This will modify production servers."
