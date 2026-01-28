@@ -1,0 +1,52 @@
+---
+- name: Create Kafka exporter install directory
+  ansible.builtin.file:
+    path: "{{ kafka_exporter_install_dir }}"
+    state: directory
+    owner: "{{ kafka_exporter_user }}"
+    group: "{{ kafka_exporter_group }}"
+    mode: "0755"
+
+- name: Check if Kafka exporter is already installed
+  ansible.builtin.stat:
+    path: "{{ kafka_exporter_install_dir }}/kafka_exporter"
+  register: kafka_exporter_installed
+
+- name: Download Kafka exporter
+  ansible.builtin.get_url:
+    url: "{{ kafka_exporter_download_url }}"
+    dest: "/tmp/kafka_exporter.tar.gz"
+    mode: "0644"
+  when: not kafka_exporter_installed.stat.exists
+
+- name: Extract Kafka exporter
+  ansible.builtin.unarchive:
+    src: "/tmp/kafka_exporter.tar.gz"
+    dest: "{{ kafka_exporter_install_dir }}"
+    remote_src: true
+    owner: "{{ kafka_exporter_user }}"
+    group: "{{ kafka_exporter_group }}"
+    extra_opts:
+      - --strip-components=1
+  when: not kafka_exporter_installed.stat.exists
+
+- name: Clean up downloaded tarball
+  ansible.builtin.file:
+    path: "/tmp/kafka_exporter.tar.gz"
+    state: absent
+
+- name: Deploy Kafka exporter systemd service
+  ansible.builtin.template:
+    src: kafka-exporter.service.j2
+    dest: /etc/systemd/system/kafka_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart kafka_exporter
+
+- name: Enable and start Kafka exporter service
+  ansible.builtin.systemd:
+    name: kafka_exporter
+    enabled: true
+    state: started
+    daemon_reload: true

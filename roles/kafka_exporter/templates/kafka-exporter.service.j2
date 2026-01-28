@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Kafka Exporter for Prometheus
+Documentation=https://github.com/danielqsj/kafka_exporter
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User={{ kafka_exporter_user }}
+Group={{ kafka_exporter_group }}
+
+ExecStart={{ kafka_exporter_install_dir }}/kafka_exporter \
+  --kafka.server={{ kafka_exporter_kafka_server }} \
+  --web.listen-address=:{{ kafka_exporter_port }} \
+  {{ kafka_exporter_extra_args }}
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

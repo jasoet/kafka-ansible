@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: your_name
+  description: Install Kafka Exporter for Prometheus metrics
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []
