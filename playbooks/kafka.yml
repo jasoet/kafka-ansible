@@ -1,0 +1,37 @@
+---
+- name: Setup Kafka Cluster
+  hosts: kafka
+  become: true
+
+  pre_tasks:
+    - name: Gather hardware and network facts
+      ansible.builtin.setup:
+        gather_subset:
+          - hardware
+          - network
+
+    - name: Display target node info
+      ansible.builtin.debug:
+        msg: "Setting up Kafka node {{ kafka_node_id }} on {{ ansible_hostname }} ({{ ansible_default_ipv4.address | default('unknown') }})"
+
+  roles:
+    - role: java
+      tags: [java]
+
+    - role: kafka
+      tags: [kafka]
+
+    - role: jmx_exporter
+      tags: [jmx, monitoring]
+
+    - role: kafka_exporter
+      tags: [kafka_exporter, monitoring]
+
+  post_tasks:
+    - name: Display Kafka cluster status
+      ansible.builtin.debug:
+        msg:
+          - "Kafka node {{ kafka_node_id }} setup complete"
+          - "Broker: {{ ansible_default_ipv4.address | default(ansible_host) }}:{{ kafka_port }}"
+          - "JMX metrics: http://{{ ansible_default_ipv4.address | default(ansible_host) }}:{{ jmx_exporter_port }}/metrics"
+          - "Kafka metrics: http://{{ ansible_default_ipv4.address | default(ansible_host) }}:{{ kafka_exporter_port }}/metrics"

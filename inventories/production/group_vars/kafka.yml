@@ -1,0 +1,16 @@
+---
+# Override defaults for production environment
+
+# Resource settings - adjust based on VM size
+# kafka_heap_size: "6g"
+
+# Retention settings
+kafka_log_retention_hours: 72
+kafka_log_retention_bytes: 53687091200
+
+# Data directory (ensure dedicated disk is mounted here)
+kafka_data_dir: "/data/kafka"
+
+# Replication settings for 3-node cluster
+kafka_default_replication_factor: 3
+kafka_min_insync_replicas: 2
