@@ -1,0 +1,4 @@
+# Test tasks (verification and validation)
+version: '3'
+
+tasks: {}

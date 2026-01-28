@@ -1,0 +1,4 @@
+# Infrastructure tasks (Terraform/Vultr provisioning)
+version: '3'
+
+tasks: {}

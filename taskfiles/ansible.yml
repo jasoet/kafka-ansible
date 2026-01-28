@@ -1,0 +1,4 @@
+# Ansible tasks (playbook execution)
+version: '3'
+
+tasks: {}
