@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.uv/
+uv.lock
+
+# Ansible
+*.retry
+.molecule/
+.cache/
+
+# JetBrains IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.idea_modules/
+
+# Zed
+.zed/
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor backups
+*~
+*.swp
+*.swo
+*.bak
+
+# Logs
+*.log
+logs/
+
+# Secrets (never commit)
+*.pem
+*.key
+secrets.yml
+vault.yml
+.vault_pass
