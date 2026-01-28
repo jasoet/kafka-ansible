@@ -41,7 +41,7 @@ dev-dependencies = [
 **Step 2: Create .python-version**
 
 ```
-3.12
+3.13
 ```
 
 **Step 3: Initialize uv and sync dependencies**

@@ -313,7 +313,7 @@ dev-dependencies = [
 
 **.python-version:**
 ```
-3.12
+3.13
 ```
 
 **Usage:**
