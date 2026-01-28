@@ -1,0 +1,11 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Create /data directory for Kafka
+      ansible.builtin.file:
+        path: /data
+        state: directory
+        mode: "0755"

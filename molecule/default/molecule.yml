@@ -1,0 +1,60 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: kafka-1
+    image: ubuntu:24.04
+    privileged: true
+    command: /sbin/init
+    systemd: true
+    groups:
+      - kafka
+  - name: kafka-2
+    image: ubuntu:24.04
+    privileged: true
+    command: /sbin/init
+    systemd: true
+    groups:
+      - kafka
+  - name: kafka-3
+    image: ubuntu:24.04
+    privileged: true
+    command: /sbin/init
+    systemd: true
+    groups:
+      - kafka
+
+provisioner:
+  name: ansible
+  playbooks:
+    converge: converge.yml
+    prepare: prepare.yml
+    verify: verify.yml
+  inventory:
+    group_vars:
+      kafka:
+        kafka_quorum_voters: "1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093"
+    host_vars:
+      kafka-1:
+        kafka_node_id: 1
+      kafka-2:
+        kafka_node_id: 2
+      kafka-3:
+        kafka_node_id: 3
+
+verifier:
+  name: ansible
+
+scenario:
+  name: default
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
