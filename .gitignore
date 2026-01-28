@@ -53,3 +53,10 @@ logs/
 secrets.yml
 vault.yml
 .vault_pass
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
