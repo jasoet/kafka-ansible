@@ -1,0 +1,31 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Check Java is installed
+      ansible.builtin.command:
+        cmd: java -version
+      register: java_check
+      changed_when: false
+
+    - name: Verify Java version is 21
+      ansible.builtin.assert:
+        that:
+          - "'21' in java_check.stderr"
+        fail_msg: "Java 21 is not installed"
+        success_msg: "Java 21 is installed correctly"
+
+    - name: Check JAVA_HOME is set
+      ansible.builtin.command:
+        cmd: grep JAVA_HOME /etc/environment
+      register: java_home_check
+      changed_when: false
+
+    - name: Verify JAVA_HOME value
+      ansible.builtin.assert:
+        that:
+          - "'/usr/lib/jvm/java-21-openjdk-amd64' in java_home_check.stdout"
+        fail_msg: "JAVA_HOME is not set correctly"
+        success_msg: "JAVA_HOME is configured correctly"

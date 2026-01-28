@@ -1,0 +1,19 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: java-test
+    image: ubuntu:24.04
+    privileged: true
+    command: /sbin/init
+    systemd: true
+
+provisioner:
+  name: ansible
+
+verifier:
+  name: ansible
