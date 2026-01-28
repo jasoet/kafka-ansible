@@ -1,0 +1,5 @@
+---
+# Java installation tasks
+- name: Placeholder
+  ansible.builtin.debug:
+    msg: "Java role tasks will be implemented"
