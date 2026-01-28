@@ -1,2 +1,57 @@
 ---
-# Placeholder - will be implemented in next task
+- name: Create Kafka directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: "0755"
+  loop:
+    - "{{ kafka_data_dir }}"
+    - "{{ kafka_log_dir }}"
+    - "{{ kafka_config_dir }}"
+
+- name: Check if Kafka is already installed
+  ansible.builtin.stat:
+    path: "{{ kafka_versioned_dir }}/bin/kafka-server-start.sh"
+  register: kafka_installed
+
+- name: Download Kafka tarball
+  ansible.builtin.get_url:
+    url: "{{ kafka_download_url }}"
+    dest: "{{ kafka_download_dest }}"
+    mode: "0644"
+  when: not kafka_installed.stat.exists
+
+- name: Create versioned install directory
+  ansible.builtin.file:
+    path: "{{ kafka_versioned_dir }}"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: "0755"
+  when: not kafka_installed.stat.exists
+
+- name: Extract Kafka tarball
+  ansible.builtin.unarchive:
+    src: "{{ kafka_download_dest }}"
+    dest: "{{ kafka_versioned_dir }}"
+    remote_src: true
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    extra_opts:
+      - --strip-components=1
+  when: not kafka_installed.stat.exists
+
+- name: Create symlink to current version
+  ansible.builtin.file:
+    src: "{{ kafka_versioned_dir }}"
+    dest: "{{ kafka_install_dir }}"
+    state: link
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
+- name: Clean up downloaded tarball
+  ansible.builtin.file:
+    path: "{{ kafka_download_dest }}"
+    state: absent
