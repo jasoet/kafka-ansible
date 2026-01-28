@@ -63,3 +63,5 @@ terraform/terraform.tfvars
 
 # Generated test inventory
 inventories/test/hosts.yml
+/terraform/.terraform.tfstate.lock.info
+.ansible/

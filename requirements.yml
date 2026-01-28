@@ -1,0 +1,5 @@
+---
+# Ansible Galaxy collections required for this project
+collections:
+  - name: containers.podman
+    version: ">=1.18.0"
