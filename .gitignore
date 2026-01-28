@@ -12,7 +12,8 @@ ENV/
 # Ansible
 *.retry
 .molecule/
-.cache/
+.cache/*
+!.cache/.gitkeep
 
 # JetBrains IDE
 .idea/
