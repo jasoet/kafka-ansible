@@ -1,0 +1,17 @@
+version: '3'
+
+vars:
+  TERRAFORM_DIR: ./terraform
+  INVENTORY_TEST: ./inventories/test/hosts.yml
+  INVENTORY_PROD: ./inventories/production/hosts.yml
+
+includes:
+  infra: ./taskfiles/infra.yml
+  ansible: ./taskfiles/ansible.yml
+  test: ./taskfiles/test.yml
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
