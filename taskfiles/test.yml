@@ -1,4 +1,52 @@
-# Test tasks (verification and validation)
 version: '3'
 
-tasks: {}
+tasks:
+  full:
+    desc: Full test cycle (up → deploy → verify → down)
+    cmds:
+      - task: ":infra:up"
+      - task: wait-for-ssh
+      - task: ":ansible:deploy"
+      - task: ":ansible:verify"
+      - defer: { task: ":infra:down" }
+    env:
+      VULTR_API_KEY: "{{.VULTR_API_KEY}}"
+
+  quick:
+    desc: Quick test (deploy → verify, assumes VMs exist)
+    cmds:
+      - task: ":ansible:deploy"
+      - task: ":ansible:verify"
+
+  converge:
+    desc: Just deploy (alias for ansible:deploy)
+    cmds:
+      - task: ":ansible:deploy"
+
+  wait-for-ssh:
+    desc: Wait for SSH to be available on all hosts
+    cmds:
+      - |
+        echo "Waiting for SSH to be available..."
+        INVENTORY=./inventories/test/hosts.yml
+        if [ ! -f "$INVENTORY" ]; then
+          echo "Inventory not found"
+          exit 1
+        fi
+        HOSTS=$(grep "ansible_host:" $INVENTORY | awk '{print $2}')
+        for HOST in $HOSTS; do
+          echo -n "Waiting for $HOST... "
+          for i in $(seq 1 30); do
+            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes root@$HOST exit 2>/dev/null; then
+              echo "ready"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "timeout"
+              exit 1
+            fi
+            sleep 5
+          done
+        done
+        echo "All hosts ready"
+    silent: true
