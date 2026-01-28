@@ -168,3 +168,34 @@ task test:full       # up → deploy → verify → down
 - Test inventory is generated, not committed to git
 - Production deployment uses separate `inventories/production/hosts.yml`
 - Ansible roles are cloud-agnostic - same roles work for test and production
+
+---
+
+## Implementation Status (2026-01-28)
+
+### Completed ✅
+- [x] Taskfile directory structure (`taskfiles/infra.yml`, `ansible.yml`, `test.yml`)
+- [x] Main `Taskfile.yml` with namespace includes
+- [x] Terraform configuration (`main.tf`, `versions.tf`, `variables.tf`, `outputs.tf`)
+- [x] Ansible inventory template (`templates/inventory.tpl`)
+- [x] Verification playbook (`playbooks/verify.yml`)
+- [x] `terraform init` working
+- [x] Code pushed to GitHub: https://github.com/jasoet/kafka-ansible
+
+### Pending ⏳
+- [ ] Integration test (VM creation → Kafka deploy → verify → destroy)
+
+### Issues Encountered
+1. **Singapore region slow provisioning**: VMs took 38+ minutes and were still in "installing" state. Switched default region to Tokyo (nrt).
+2. **Vultr API IP restriction**: API key had IP whitelist enabled. Required adding current IP to allowed list in Vultr settings.
+
+### Configuration
+- **Region:** `nrt` (Tokyo, Japan) - changed from `sgp` due to slow provisioning
+- **SSH Key ID:** `ed68e543-2daa-4539-82a8-847d2866b006`
+- **VM Plan:** `vc2-1c-1gb` (~$5/mo each)
+- **OS:** Ubuntu 24.04 LTS (ID: 2284)
+
+### Next Steps
+1. Resolve Vultr provisioning issues
+2. Run full integration test: `task test:full`
+3. Verify Kafka cluster deployment works end-to-end
