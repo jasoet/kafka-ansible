@@ -1,0 +1,37 @@
+---
+- name: Create JMX exporter install directory
+  ansible.builtin.file:
+    path: "{{ jmx_exporter_install_dir }}"
+    state: directory
+    owner: "{{ kafka_user | default('kafka') }}"
+    group: "{{ kafka_group | default('kafka') }}"
+    mode: "0755"
+
+- name: Download JMX exporter jar
+  ansible.builtin.get_url:
+    url: "{{ jmx_exporter_download_url }}"
+    dest: "{{ jmx_exporter_install_dir }}/{{ jmx_exporter_jar }}"
+    owner: "{{ kafka_user | default('kafka') }}"
+    group: "{{ kafka_group | default('kafka') }}"
+    mode: "0644"
+
+- name: Deploy JMX exporter configuration
+  ansible.builtin.template:
+    src: kafka-jmx-config.yml.j2
+    dest: "{{ jmx_exporter_config_file }}"
+    owner: "{{ kafka_user | default('kafka') }}"
+    group: "{{ kafka_group | default('kafka') }}"
+    mode: "0644"
+  notify: Restart kafka
+
+- name: Set JMX exporter Java agent options fact
+  ansible.builtin.set_fact:
+    kafka_jmx_opts: "-javaagent:{{ jmx_exporter_install_dir }}/{{ jmx_exporter_jar }}={{ jmx_exporter_port }}:{{ jmx_exporter_config_file }}"
+
+- name: Update Kafka systemd service with JMX options
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/system/kafka.service
+    regexp: '^Environment="KAFKA_OPTS='
+    line: 'Environment="KAFKA_OPTS={{ kafka_jmx_opts }}"'
+    insertafter: '^Environment="KAFKA_JVM_PERFORMANCE_OPTS='
+  notify: Restart kafka
