@@ -8,7 +8,6 @@ __pycache__/
 venv/
 ENV/
 .uv/
-uv.lock
 
 # Ansible
 *.retry

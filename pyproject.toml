@@ -1,0 +1,17 @@
+[project]
+name = "kafka-ansible"
+version = "0.1.0"
+description = "Ansible roles for Kafka KRaft cluster deployment"
+requires-python = ">=3.11"
+
+dependencies = [
+    "ansible-core>=2.16",
+    "ansible-lint>=24.0",
+    "molecule>=6.0",
+    "molecule-podman>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
