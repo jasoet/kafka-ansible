@@ -1,0 +1,48 @@
+---
+# Kafka version
+kafka_version: "4.1.1"
+kafka_scala_version: "2.13"
+kafka_download_url: "https://downloads.apache.org/kafka/{{ kafka_version }}/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+kafka_checksum_url: "{{ kafka_download_url }}.sha512"
+
+# Directories
+kafka_install_dir: "/opt/kafka"
+kafka_data_dir: "/data/kafka"
+kafka_log_dir: "/var/log/kafka"
+kafka_config_dir: "/etc/kafka"
+
+# User/Group
+kafka_user: "kafka"
+kafka_group: "kafka"
+
+# KRaft settings
+kafka_cluster_id: ""
+kafka_combined_mode: true
+kafka_node_id: 1
+kafka_quorum_voters: ""
+
+# Network
+kafka_port: 9092
+kafka_controller_port: 9093
+
+# Retention (3 days default)
+kafka_log_retention_hours: 72
+kafka_log_retention_bytes: 53687091200
+
+# Performance - resource aware defaults
+kafka_heap_size: "{{ [(ansible_memtotal_mb * 0.25) | int, 1024] | max | min(8192) }}m"
+kafka_num_network_threads: "{{ [(ansible_processor_vcpus | default(2) / 2) | int, 3] | max }}"
+kafka_num_io_threads: "{{ [(ansible_processor_vcpus | default(2) * 2) | int, 8] | max }}"
+kafka_num_partitions: 6
+
+# Small message optimizations (2KB messages)
+kafka_message_max_bytes: 1048576
+kafka_replica_fetch_max_bytes: 1048576
+kafka_log_segment_bytes: 536870912
+
+# Batch consumer friendly
+kafka_fetch_min_bytes: 131072
+kafka_fetch_max_wait_ms: 1000
+
+# JMX settings (placeholder for jmx_exporter role)
+kafka_jmx_opts: ""

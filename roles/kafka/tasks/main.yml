@@ -1,0 +1,12 @@
+---
+- name: Include user tasks
+  ansible.builtin.include_tasks: user.yml
+
+- name: Include install tasks
+  ansible.builtin.include_tasks: install.yml
+
+- name: Include configure tasks
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Include service tasks
+  ansible.builtin.include_tasks: service.yml

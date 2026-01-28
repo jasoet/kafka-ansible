@@ -1,0 +1,5 @@
+---
+# Internal variables - do not override
+kafka_versioned_dir: "/opt/kafka-{{ kafka_version }}"
+kafka_tarball: "kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+kafka_download_dest: "/tmp/{{ kafka_tarball }}"
