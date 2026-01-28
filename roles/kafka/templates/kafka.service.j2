@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Apache Kafka Server
+Documentation=https://kafka.apache.org/documentation/
+After=network.target
+
+[Service]
+Type=simple
+User={{ kafka_user }}
+Group={{ kafka_group }}
+
+Environment="JAVA_HOME={{ java_home | default('/usr/lib/jvm/java-21-openjdk-amd64') }}"
+Environment="KAFKA_HEAP_OPTS=-Xms{{ kafka_heap_size }} -Xmx{{ kafka_heap_size }}"
+Environment="KAFKA_JVM_PERFORMANCE_OPTS=-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent -XX:+ParallelRefProcEnabled"
+{% if kafka_jmx_opts != "" %}
+Environment="KAFKA_OPTS={{ kafka_jmx_opts }}"
+{% endif %}
+
+ExecStart={{ kafka_install_dir }}/bin/kafka-server-start.sh {{ kafka_config_dir }}/server.properties
+ExecStop={{ kafka_install_dir }}/bin/kafka-server-stop.sh
+
+Restart=on-failure
+RestartSec=10
+
+LimitNOFILE=100000
+LimitNPROC=32768
+
+StandardOutput=append:{{ kafka_log_dir }}/kafka.log
+StandardError=append:{{ kafka_log_dir }}/kafka-error.log
+
+[Install]
+WantedBy=multi-user.target
