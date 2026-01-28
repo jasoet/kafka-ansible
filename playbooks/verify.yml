@@ -1,0 +1,452 @@
+---
+# Comprehensive verification playbook for Kafka cluster
+# Run with: ansible-playbook -i inventory playbooks/verify.yml
+
+#######################################
+# Play 1: Individual Node Verification
+#######################################
+- name: Verify Kafka Node Configuration
+  hosts: kafka
+  become: true
+  gather_facts: true
+
+  vars:
+    kafka_install_dir: "/opt/kafka"
+    kafka_config_dir: "/etc/kafka"
+    kafka_data_dir: "/data/kafka"
+    kafka_user: "kafka"
+    kafka_group: "kafka"
+    kafka_port: 9092
+    kafka_controller_port: 9093
+    jmx_exporter_port: 7071
+    kafka_exporter_port: 9308
+
+  tasks:
+    #######################################
+    # Java Verification
+    #######################################
+    - name: Check Java binary exists
+      ansible.builtin.command:
+        cmd: which java
+      register: java_which
+      changed_when: false
+
+    - name: Assert Java binary is available
+      ansible.builtin.assert:
+        that:
+          - java_which.rc == 0
+        fail_msg: "Java binary not found in PATH"
+        success_msg: "Java binary found at {{ java_which.stdout }}"
+
+    - name: Get Java version
+      ansible.builtin.command:
+        cmd: java -version
+      register: java_version
+      changed_when: false
+
+    - name: Assert Java is OpenJDK 21
+      ansible.builtin.assert:
+        that:
+          - "'21' in java_version.stderr"
+          - "'openjdk' in java_version.stderr | lower"
+        fail_msg: "Java is not OpenJDK 21. Got: {{ java_version.stderr }}"
+        success_msg: "OpenJDK 21 is installed correctly"
+
+    #######################################
+    # Kafka User/Group Verification
+    #######################################
+    - name: Check kafka user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ kafka_user }}"
+      register: kafka_user_check
+
+    - name: Assert kafka user exists
+      ansible.builtin.assert:
+        that:
+          - kafka_user_check is not failed
+        fail_msg: "Kafka user '{{ kafka_user }}' does not exist"
+        success_msg: "Kafka user '{{ kafka_user }}' exists"
+
+    - name: Check kafka group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ kafka_group }}"
+      register: kafka_group_check
+
+    - name: Assert kafka group exists
+      ansible.builtin.assert:
+        that:
+          - kafka_group_check is not failed
+        fail_msg: "Kafka group '{{ kafka_group }}' does not exist"
+        success_msg: "Kafka group '{{ kafka_group }}' exists"
+
+    #######################################
+    # Kafka Installation Verification
+    #######################################
+    - name: Check Kafka install directory exists
+      ansible.builtin.stat:
+        path: "{{ kafka_install_dir }}"
+      register: kafka_install_stat
+
+    - name: Assert Kafka install directory exists
+      ansible.builtin.assert:
+        that:
+          - kafka_install_stat.stat.exists
+          - kafka_install_stat.stat.isdir
+        fail_msg: "Kafka install directory {{ kafka_install_dir }} does not exist"
+        success_msg: "Kafka install directory {{ kafka_install_dir }} exists"
+
+    - name: Check Kafka binaries exist
+      ansible.builtin.stat:
+        path: "{{ kafka_install_dir }}/bin/{{ item }}"
+      loop:
+        - kafka-server-start.sh
+        - kafka-topics.sh
+        - kafka-console-producer.sh
+        - kafka-console-consumer.sh
+      register: kafka_binaries
+
+    - name: Assert Kafka binaries exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.executable
+        fail_msg: "Kafka binary {{ item.item }} does not exist or is not executable"
+        success_msg: "Kafka binary {{ item.item }} exists and is executable"
+      loop: "{{ kafka_binaries.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Kafka Configuration Verification
+    #######################################
+    - name: Check server.properties exists
+      ansible.builtin.stat:
+        path: "{{ kafka_config_dir }}/server.properties"
+      register: server_properties_stat
+
+    - name: Assert server.properties exists
+      ansible.builtin.assert:
+        that:
+          - server_properties_stat.stat.exists
+        fail_msg: "Kafka server.properties not found at {{ kafka_config_dir }}/server.properties"
+        success_msg: "Kafka server.properties exists"
+
+    - name: Check node.id is configured in server.properties
+      ansible.builtin.command:
+        cmd: grep -E "^node\.id=" {{ kafka_config_dir }}/server.properties
+      register: node_id_check
+      changed_when: false
+
+    - name: Assert node.id is configured
+      ansible.builtin.assert:
+        that:
+          - node_id_check.rc == 0
+          - node_id_check.stdout | length > 0
+        fail_msg: "node.id is not configured in server.properties"
+        success_msg: "node.id is configured: {{ node_id_check.stdout }}"
+
+    #######################################
+    # Kafka Service Verification
+    #######################################
+    - name: Check Kafka service status
+      ansible.builtin.systemd:
+        name: kafka
+      register: kafka_service
+
+    - name: Assert Kafka service is running
+      ansible.builtin.assert:
+        that:
+          - kafka_service.status.ActiveState == "active"
+        fail_msg: "Kafka service is not running (state: {{ kafka_service.status.ActiveState }})"
+        success_msg: "Kafka service is running"
+
+    - name: Assert Kafka service is enabled
+      ansible.builtin.assert:
+        that:
+          - kafka_service.status.UnitFileState == "enabled"
+        fail_msg: "Kafka service is not enabled"
+        success_msg: "Kafka service is enabled"
+
+    #######################################
+    # Port Verification
+    #######################################
+    - name: Wait for Kafka broker port
+      ansible.builtin.wait_for:
+        port: "{{ kafka_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Debug - Kafka broker port is listening
+      ansible.builtin.debug:
+        msg: "Kafka broker port {{ kafka_port }} is listening"
+
+    - name: Wait for Kafka controller port
+      ansible.builtin.wait_for:
+        port: "{{ kafka_controller_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Debug - Kafka controller port is listening
+      ansible.builtin.debug:
+        msg: "Kafka controller port {{ kafka_controller_port }} is listening"
+
+    #######################################
+    # JMX Exporter Verification
+    #######################################
+    - name: Wait for JMX exporter port
+      ansible.builtin.wait_for:
+        port: "{{ jmx_exporter_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Check JMX exporter metrics endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:{{ jmx_exporter_port }}/metrics"
+        return_content: true
+        timeout: 30
+      register: jmx_metrics
+      retries: 3
+      delay: 5
+
+    - name: Assert JMX exporter is returning metrics
+      ansible.builtin.assert:
+        that:
+          - jmx_metrics.status == 200
+          - "'jvm_' in jmx_metrics.content"
+        fail_msg: "JMX exporter is not returning expected metrics"
+        success_msg: "JMX exporter is responding with metrics on port {{ jmx_exporter_port }}"
+
+    #######################################
+    # Kafka Exporter Verification
+    #######################################
+    - name: Check Kafka exporter service status
+      ansible.builtin.systemd:
+        name: kafka_exporter
+      register: kafka_exporter_service
+
+    - name: Assert Kafka exporter service is running
+      ansible.builtin.assert:
+        that:
+          - kafka_exporter_service.status.ActiveState == "active"
+        fail_msg: "Kafka exporter service is not running"
+        success_msg: "Kafka exporter service is running"
+
+    - name: Wait for Kafka exporter port
+      ansible.builtin.wait_for:
+        port: "{{ kafka_exporter_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Check Kafka exporter metrics endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:{{ kafka_exporter_port }}/metrics"
+        return_content: true
+        timeout: 30
+      register: kafka_exp_metrics
+      retries: 3
+      delay: 5
+
+    - name: Assert Kafka exporter is returning metrics
+      ansible.builtin.assert:
+        that:
+          - kafka_exp_metrics.status == 200
+          - "'kafka_' in kafka_exp_metrics.content"
+        fail_msg: "Kafka exporter is not returning expected metrics"
+        success_msg: "Kafka exporter is responding with metrics on port {{ kafka_exporter_port }}"
+
+    #######################################
+    # Node Verification Summary
+    #######################################
+    - name: Node verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Node Verification Complete: {{ inventory_hostname }}"
+          - "========================================"
+          - "Java: OpenJDK 21 - OK"
+          - "Kafka User/Group: {{ kafka_user }}/{{ kafka_group }} - OK"
+          - "Kafka Installation: {{ kafka_install_dir }} - OK"
+          - "Kafka Configuration: {{ kafka_config_dir }}/server.properties - OK"
+          - "Kafka Service: Running and Enabled - OK"
+          - "Broker Port: {{ kafka_port }} - OK"
+          - "Controller Port: {{ kafka_controller_port }} - OK"
+          - "JMX Exporter: Port {{ jmx_exporter_port }} - OK"
+          - "Kafka Exporter: Port {{ kafka_exporter_port }} - OK"
+          - "========================================"
+
+#######################################
+# Play 2: Cluster-wide Verification
+#######################################
+- name: Verify Kafka Cluster Health
+  hosts: kafka[0]
+  become: true
+  gather_facts: false
+
+  vars:
+    kafka_install_dir: "/opt/kafka"
+    kafka_port: 9092
+    test_topic: "verification-test-{{ ansible_date_time.epoch }}"
+
+  tasks:
+    - name: Gather date/time facts
+      ansible.builtin.setup:
+        gather_subset:
+          - date_time
+
+    - name: Set test topic name
+      ansible.builtin.set_fact:
+        test_topic: "verification-test-{{ ansible_date_time.epoch }}"
+
+    - name: Debug - Starting cluster health verification
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Starting Cluster Health Verification"
+          - "Running on: {{ inventory_hostname }}"
+          - "Test topic: {{ test_topic }}"
+          - "========================================"
+
+    #######################################
+    # Cluster Connectivity
+    #######################################
+    - name: Verify cluster can list topics
+      ansible.builtin.command:
+        cmd: "{{ kafka_install_dir }}/bin/kafka-topics.sh --bootstrap-server localhost:{{ kafka_port }} --list"
+      register: list_topics
+      changed_when: false
+      retries: 3
+      delay: 5
+
+    - name: Assert topic listing works
+      ansible.builtin.assert:
+        that:
+          - list_topics.rc == 0
+        fail_msg: "Failed to list topics: {{ list_topics.stderr }}"
+        success_msg: "Successfully connected to Kafka cluster and listed topics"
+
+    #######################################
+    # Create Test Topic
+    #######################################
+    - name: Create test topic
+      ansible.builtin.command:
+        cmd: >
+          {{ kafka_install_dir }}/bin/kafka-topics.sh
+          --bootstrap-server localhost:{{ kafka_port }}
+          --create
+          --topic {{ test_topic }}
+          --partitions 3
+          --replication-factor 1
+      register: create_topic
+      changed_when: true
+
+    - name: Assert topic creation succeeded
+      ansible.builtin.assert:
+        that:
+          - create_topic.rc == 0
+        fail_msg: "Failed to create test topic: {{ create_topic.stderr }}"
+        success_msg: "Successfully created test topic: {{ test_topic }}"
+
+    - name: Wait for topic to be ready
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: Verify test topic exists
+      ansible.builtin.command:
+        cmd: "{{ kafka_install_dir }}/bin/kafka-topics.sh --bootstrap-server localhost:{{ kafka_port }} --describe --topic {{ test_topic }}"
+      register: describe_topic
+      changed_when: false
+
+    - name: Assert topic was created correctly
+      ansible.builtin.assert:
+        that:
+          - describe_topic.rc == 0
+          - test_topic in describe_topic.stdout
+        fail_msg: "Test topic not found or not configured correctly"
+        success_msg: "Test topic exists and is configured correctly"
+
+    #######################################
+    # Produce Test Message
+    #######################################
+    - name: Produce test message to topic
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          echo "verification-message-{{ ansible_date_time.epoch }}" | {{ kafka_install_dir }}/bin/kafka-console-producer.sh \
+            --bootstrap-server localhost:{{ kafka_port }} \
+            --topic {{ test_topic }}
+      register: produce_message
+      changed_when: true
+
+    - name: Assert message production succeeded
+      ansible.builtin.assert:
+        that:
+          - produce_message.rc == 0
+        fail_msg: "Failed to produce message: {{ produce_message.stderr }}"
+        success_msg: "Successfully produced test message"
+
+    #######################################
+    # Consume Test Message
+    #######################################
+    - name: Consume test message from topic
+      ansible.builtin.command:
+        cmd: >
+          {{ kafka_install_dir }}/bin/kafka-console-consumer.sh
+          --bootstrap-server localhost:{{ kafka_port }}
+          --topic {{ test_topic }}
+          --from-beginning
+          --timeout-ms 10000
+          --max-messages 1
+      register: consume_message
+      changed_when: false
+
+    - name: Assert message consumption succeeded
+      ansible.builtin.assert:
+        that:
+          - consume_message.rc == 0
+          - "'verification-message' in consume_message.stdout"
+        fail_msg: "Failed to consume message or message content mismatch"
+        success_msg: "Successfully consumed test message: {{ consume_message.stdout }}"
+
+    #######################################
+    # Delete Test Topic
+    #######################################
+    - name: Delete test topic
+      ansible.builtin.command:
+        cmd: >
+          {{ kafka_install_dir }}/bin/kafka-topics.sh
+          --bootstrap-server localhost:{{ kafka_port }}
+          --delete
+          --topic {{ test_topic }}
+      register: delete_topic
+      changed_when: true
+
+    - name: Assert topic deletion succeeded
+      ansible.builtin.assert:
+        that:
+          - delete_topic.rc == 0
+        fail_msg: "Failed to delete test topic: {{ delete_topic.stderr }}"
+        success_msg: "Successfully deleted test topic: {{ test_topic }}"
+
+    #######################################
+    # Cluster Verification Summary
+    #######################################
+    - name: Cluster verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Cluster Health Verification Complete"
+          - "========================================"
+          - "Cluster Connectivity: OK"
+          - "Topic Creation: OK"
+          - "Message Production: OK"
+          - "Message Consumption: OK"
+          - "Topic Deletion: OK"
+          - "========================================"
+          - "All verifications passed successfully!"
+          - "========================================"
