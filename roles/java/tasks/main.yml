@@ -1,5 +1,28 @@
 ---
-# Java installation tasks
-- name: Placeholder
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install OpenJDK {{ java_version }}
+  ansible.builtin.apt:
+    name: "{{ java_package }}"
+    state: present
+
+- name: Set JAVA_HOME in /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: '^JAVA_HOME='
+    line: 'JAVA_HOME={{ java_home }}'
+    create: true
+    mode: "0644"
+
+- name: Verify Java installation
+  ansible.builtin.command:
+    cmd: "{{ java_home }}/bin/java -version"
+  register: java_version_output
+  changed_when: false
+
+- name: Display Java version
   ansible.builtin.debug:
-    msg: "Java role tasks will be implemented"
+    var: java_version_output.stderr_lines
