@@ -62,3 +62,23 @@ tasks:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Production inventory not found: {{.INVENTORY}}"
     prompt: "Deploy to PRODUCTION? This will modify production servers."
+
+  verify:prod:
+    desc: Verify production Kafka cluster
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
+
+  verify:prod:single:
+    desc: "Verify single production node (usage: task ansible:verify:prod:single -- kafka-1)"
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml --limit {{.CLI_ARGS | default "kafka-1"}}
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
