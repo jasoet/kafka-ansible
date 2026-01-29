@@ -1,6 +1,10 @@
 ---
 # Disk mount role - idempotent disk formatting and mounting
 
+- name: Initialize variables
+  ansible.builtin.set_fact:
+    disk_already_mounted: false
+
 - name: Install filesystem tools
   ansible.builtin.apt:
     name:
@@ -10,8 +14,21 @@
     update_cache: true
     cache_valid_time: 3600
 
-- name: Auto-detect disk device if not specified
-  when: disk_mount_device == ""
+- name: Check if mount path is already mounted
+  ansible.builtin.command:
+    cmd: "findmnt -n -o SOURCE {{ disk_mount_path }}"
+  register: existing_mount
+  changed_when: false
+  failed_when: false
+
+- name: Use existing mount device if already mounted
+  ansible.builtin.set_fact:
+    disk_mount_device: "{{ existing_mount.stdout | trim }}"
+    disk_already_mounted: true
+  when: existing_mount.rc == 0 and existing_mount.stdout | trim != ""
+
+- name: Auto-detect disk device if not specified and not already mounted
+  when: disk_mount_device == "" and (existing_mount.rc != 0 or existing_mount.stdout | trim == "")
   block:
     - name: Get list of block devices (JSON)
       ansible.builtin.command:
@@ -31,9 +48,9 @@
              | first
              | default('') }}
 
-- name: Fail if no unformatted disk found
+- name: Fail if no disk device available
   ansible.builtin.fail:
-    msg: "No unformatted disk found for auto-detection"
+    msg: "No disk device specified or detected"
   when: disk_mount_device == ""
 
 - name: Display target disk
