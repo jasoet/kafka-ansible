@@ -1,0 +1,25 @@
+# Lima VM template for Kafka testing
+# Matches production: Ubuntu 24.04 ARM64 with unformatted data disk
+
+minimumLimaVersion: "2.0.0"
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+cpus: 2
+memory: "4GiB"
+disk: "20GiB"
+
+# Additional unformatted disk - simulates production NVMe
+additionalDisks:
+  - name: "data"
+    format: false
+
+ssh:
+  loadDotSSHPubKeys: true
+
+# Disable container runtimes - not needed for Ansible testing
+containerd:
+  system: false
+  user: false
