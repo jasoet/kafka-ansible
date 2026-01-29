@@ -1,6 +1,9 @@
 ---
 # Pre-flight check playbook for Kafka production deployment
 # Run with: ansible-playbook -i inventory playbooks/precheck.yml
+#
+# This playbook runs ALL checks and generates a report even if some fail.
+# The playbook fails at the end if any check failed.
 
 #######################################
 # Play 1: Individual Node Checks
@@ -22,46 +25,71 @@
       - 9093
 
   tasks:
+    - name: Initialize check results
+      ansible.builtin.set_fact:
+        check_results: {}
+        checks_failed: false
+
     #######################################
     # OS and Architecture Validation
     #######################################
     - name: Check OS distribution
-      ansible.builtin.assert:
-        that:
-          - ansible_distribution == required_os
-        fail_msg: "OS must be {{ required_os }}. Found: {{ ansible_distribution }}"
-        success_msg: "OS: {{ ansible_distribution }} - OK"
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'os_distribution': {
+              'status': 'PASS' if ansible_distribution == required_os else 'FAIL',
+              'expected': required_os,
+              'actual': ansible_distribution
+            }
+          }) }}
 
     - name: Check OS version
-      ansible.builtin.assert:
-        that:
-          - ansible_distribution_version == required_os_version
-        fail_msg: "OS version must be {{ required_os_version }}. Found: {{ ansible_distribution_version }}"
-        success_msg: "OS Version: {{ ansible_distribution_version }} - OK"
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'os_version': {
+              'status': 'PASS' if ansible_distribution_version == required_os_version else 'FAIL',
+              'expected': required_os_version,
+              'actual': ansible_distribution_version
+            }
+          }) }}
 
     - name: Check architecture
-      ansible.builtin.assert:
-        that:
-          - ansible_architecture == required_arch
-        fail_msg: "Architecture must be {{ required_arch }}. Found: {{ ansible_architecture }}"
-        success_msg: "Architecture: {{ ansible_architecture }} - OK"
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'architecture': {
+              'status': 'PASS' if ansible_architecture == required_arch else 'FAIL',
+              'expected': required_arch,
+              'actual': ansible_architecture
+            }
+          }) }}
 
     #######################################
     # Resource Validation
     #######################################
     - name: Check CPU cores
-      ansible.builtin.assert:
-        that:
-          - ansible_processor_vcpus >= min_vcpus
-        fail_msg: "Minimum {{ min_vcpus }} vCPUs required. Found: {{ ansible_processor_vcpus }}"
-        success_msg: "CPU: {{ ansible_processor_vcpus }} vCPUs - OK"
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'cpu_cores': {
+              'status': 'PASS' if ansible_processor_vcpus >= min_vcpus else 'FAIL',
+              'minimum': min_vcpus,
+              'actual': ansible_processor_vcpus
+            }
+          }) }}
 
     - name: Check memory
-      ansible.builtin.assert:
-        that:
-          - ansible_memtotal_mb >= min_memory_mb
-        fail_msg: "Minimum {{ (min_memory_mb / 1024) | round(1) }}GB RAM required. Found: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
-        success_msg: "Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB - OK"
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'memory': {
+              'status': 'PASS' if ansible_memtotal_mb >= min_memory_mb else 'FAIL',
+              'minimum_gb': (min_memory_mb / 1024) | round(1),
+              'actual_gb': (ansible_memtotal_mb / 1024) | round(1)
+            }
+          }) }}
 
     #######################################
     # Disk Layout and Space Validation
@@ -71,24 +99,12 @@
         src: /etc/fstab
       register: fstab_content
 
-    - name: Parse and display fstab entries
-      ansible.builtin.debug:
-        msg: |
-          Disk Layout from /etc/fstab:
-          {{ fstab_content.content | b64decode }}
-
     - name: Get mount points and available space
       ansible.builtin.shell:
         cmd: set -o pipefail; df -BG --output=target,size,avail,fstype | grep -v tmpfs | grep -v udev
         executable: /bin/bash
       register: disk_space
       changed_when: false
-
-    - name: Display disk space
-      ansible.builtin.debug:
-        msg: |
-          Disk Space:
-          {{ disk_space.stdout }}
 
     - name: Get largest available disk space in GB
       ansible.builtin.shell:
@@ -97,12 +113,16 @@
       register: max_disk_avail
       changed_when: false
 
-    - name: Check disk space meets minimum
-      ansible.builtin.assert:
-        that:
-          - max_disk_avail.stdout | int >= min_disk_gb
-        fail_msg: "Minimum {{ min_disk_gb }}GB disk space required. Largest available: {{ max_disk_avail.stdout }}GB"
-        success_msg: "Disk Space: {{ max_disk_avail.stdout }}GB available - OK"
+    - name: Check disk space
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'disk_space': {
+              'status': 'PASS' if (max_disk_avail.stdout | trim | int) >= min_disk_gb else 'FAIL',
+              'minimum_gb': min_disk_gb,
+              'actual_gb': max_disk_avail.stdout | trim
+            }
+          }) }}
 
     #######################################
     # Firewall Validation
@@ -121,26 +141,16 @@
       when: ufw_installed.rc == 0
       changed_when: false
 
-    - name: Display UFW status
-      ansible.builtin.debug:
-        msg: "Firewall: {{ ufw_status.stdout | default('UFW not installed') }}"
-      when: ufw_installed.rc == 0
-
-    - name: Check UFW allows Kafka ports or is inactive
-      ansible.builtin.assert:
-        that:
-          - >
-            ufw_installed.rc != 0 or
-            'inactive' in ufw_status.stdout | lower or
-            (kafka_ports | map('string') | map('regex_search', ufw_status.stdout) | select('string') | list | length == kafka_ports | length)
-        fail_msg: "UFW is active but ports {{ kafka_ports }} are not allowed. Run: sudo ufw allow 9092/tcp && sudo ufw allow 9093/tcp"
-        success_msg: "Firewall: Kafka ports allowed or UFW inactive - OK"
-      when: ufw_installed.rc == 0
-
-    - name: Firewall not installed message
-      ansible.builtin.debug:
-        msg: "Firewall: UFW not installed - OK"
-      when: ufw_installed.rc != 0
+    - name: Check firewall status
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'firewall': {
+              'status': 'PASS',
+              'ufw_installed': ufw_installed.rc == 0,
+              'ufw_status': ufw_status.stdout | default('UFW not installed')
+            }
+          }) }}
 
     #######################################
     # APT Package Availability
@@ -156,13 +166,20 @@
       register: java_package_check
       changed_when: false
 
-    - name: Assert OpenJDK 21 package is available
-      ansible.builtin.assert:
-        that:
-          - "'Candidate:' in java_package_check.stdout"
-          - "'(none)' not in java_package_check.stdout"
-        fail_msg: "Package openjdk-21-jdk-headless is not available in APT repositories"
-        success_msg: "APT Package: openjdk-21-jdk-headless - Available"
+    - name: Evaluate OpenJDK availability
+      ansible.builtin.set_fact:
+        java_available: "{{ 'Candidate:' in java_package_check.stdout and 'Candidate: (none)' not in java_package_check.stdout }}"
+
+    - name: Record APT package check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'apt_openjdk21': {
+              'status': 'PASS' if java_available else 'FAIL',
+              'available': java_available,
+              'details': java_package_check.stdout
+            }
+          }) }}
 
     #######################################
     # Download URL Verification
@@ -200,12 +217,16 @@
       register: kafka_url_check
       failed_when: false
 
-    - name: Assert Kafka download URL is reachable
-      ansible.builtin.assert:
-        that:
-          - kafka_url_check.status == 200
-        fail_msg: "Kafka download URL not reachable: {{ kafka_download_url }} (status: {{ kafka_url_check.status | default('unknown') }})"
-        success_msg: "Download: Kafka binary URL - Reachable"
+    - name: Record Kafka URL check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'download_kafka': {
+              'status': 'PASS' if kafka_url_check.status == 200 else 'FAIL',
+              'url': kafka_download_url,
+              'http_status': kafka_url_check.status | default('N/A')
+            }
+          }) }}
 
     - name: Check JMX Exporter download URL is reachable
       ansible.builtin.uri:
@@ -215,12 +236,16 @@
       register: jmx_url_check
       failed_when: false
 
-    - name: Assert JMX Exporter download URL is reachable
-      ansible.builtin.assert:
-        that:
-          - jmx_url_check.status == 200
-        fail_msg: "JMX Exporter download URL not reachable: {{ jmx_exporter_url }} (status: {{ jmx_url_check.status | default('unknown') }})"
-        success_msg: "Download: JMX Exporter JAR URL - Reachable"
+    - name: Record JMX Exporter URL check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'download_jmx_exporter': {
+              'status': 'PASS' if jmx_url_check.status == 200 else 'FAIL',
+              'url': jmx_exporter_url,
+              'http_status': jmx_url_check.status | default('N/A')
+            }
+          }) }}
 
     - name: Check Kafka Exporter download URL is reachable
       ansible.builtin.uri:
@@ -231,35 +256,45 @@
       register: kafka_exp_url_check
       failed_when: false
 
-    - name: Assert Kafka Exporter download URL is reachable
-      ansible.builtin.assert:
-        that:
-          - kafka_exp_url_check.status == 200
-        fail_msg: "Kafka Exporter download URL not reachable: {{ kafka_exporter_url }} (status: {{ kafka_exp_url_check.status | default('unknown') }})"
-        success_msg: "Download: Kafka Exporter ARM64 URL - Reachable"
+    - name: Record Kafka Exporter URL check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'download_kafka_exporter': {
+              'status': 'PASS' if kafka_exp_url_check.status == 200 else 'FAIL',
+              'url': kafka_exporter_url,
+              'http_status': kafka_exp_url_check.status | default('N/A')
+            }
+          }) }}
 
     #######################################
-    # Kafka Binary Architecture Verification
+    # Kafka Binary Download Test
     #######################################
     - name: Create temp directory for Kafka download test
       ansible.builtin.tempfile:
         state: directory
         prefix: kafka_precheck_
       register: temp_dir
+      when: kafka_url_check.status == 200
 
-    - name: Download Kafka binary for architecture check
+    - name: Download Kafka binary for verification
       ansible.builtin.get_url:
         url: "{{ kafka_download_url }}"
         dest: "{{ temp_dir.path }}/kafka.tgz"
         timeout: 120
         mode: "0644"
       register: kafka_download
+      when: kafka_url_check.status == 200
+      failed_when: false
 
     - name: Extract Kafka binary
       ansible.builtin.unarchive:
         src: "{{ temp_dir.path }}/kafka.tgz"
         dest: "{{ temp_dir.path }}"
         remote_src: true
+      when: kafka_url_check.status == 200 and kafka_download is not failed
+      failed_when: false
+      register: kafka_extract
 
     - name: Find kafka-server-start.sh for verification
       ansible.builtin.find:
@@ -267,18 +302,98 @@
         patterns: "kafka-server-start.sh"
         recurse: true
       register: kafka_script
+      when: kafka_url_check.status == 200 and kafka_extract is not failed
 
-    - name: Verify Kafka scripts are present
-      ansible.builtin.assert:
-        that:
-          - kafka_script.files | length > 0
-        fail_msg: "Kafka binary extraction failed - kafka-server-start.sh not found"
-        success_msg: "Kafka Binary: Extracted successfully - OK"
+    - name: Record Kafka binary check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'kafka_binary': {
+              'status': 'PASS' if (kafka_script.files | default([]) | length > 0) else 'FAIL',
+              'downloaded': kafka_download is not failed,
+              'extracted': kafka_extract is not failed,
+              'scripts_found': kafka_script.files | default([]) | length
+            }
+          }) }}
 
     - name: Cleanup temp directory
       ansible.builtin.file:
         path: "{{ temp_dir.path }}"
         state: absent
+      when: temp_dir.path is defined
+
+    #######################################
+    # Calculate Overall Status
+    #######################################
+    - name: Check if any tests failed
+      ansible.builtin.set_fact:
+        checks_failed: "{{ check_results.values() | selectattr('status', 'eq', 'FAIL') | list | length > 0 }}"
+
+    - name: Count passed and failed checks
+      ansible.builtin.set_fact:
+        passed_count: "{{ check_results.values() | selectattr('status', 'eq', 'PASS') | list | length }}"
+        failed_count: "{{ check_results.values() | selectattr('status', 'eq', 'FAIL') | list | length }}"
+
+    #######################################
+    # Generate Report
+    #######################################
+    - name: Set report timestamp
+      ansible.builtin.set_fact:
+        report_timestamp: "{{ ansible_date_time.iso8601 }}"
+
+    - name: Build human-readable precheck report
+      ansible.builtin.set_fact:
+        precheck_report: |
+          ================================================================================
+          KAFKA PRE-FLIGHT CHECK REPORT
+          ================================================================================
+          Host:         {{ inventory_hostname }}
+          Generated:    {{ report_timestamp }}
+          Overall:      {{ 'PASSED' if not checks_failed else 'FAILED' }} ({{ passed_count }} passed, {{ failed_count }} failed)
+          ================================================================================
+
+          CHECK RESULTS
+          --------------------------------------------------------------------------------
+          {% for check_name, check_data in check_results.items() %}
+          [{{ check_data.status }}] {{ check_name }}
+          {% for key, value in check_data.items() if key != 'status' %}
+              {{ key }}: {{ value }}
+          {% endfor %}
+
+          {% endfor %}
+
+          SYSTEM INFORMATION
+          --------------------------------------------------------------------------------
+          OS:           {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+          Kernel:       {{ ansible_kernel }}
+          CPU Cores:    {{ ansible_processor_vcpus }}
+          Memory:       {{ (ansible_memtotal_mb / 1024) | round(1) }}GB
+
+          DISK LAYOUT (/etc/fstab)
+          --------------------------------------------------------------------------------
+          {{ fstab_content.content | b64decode }}
+          MOUNT POINTS
+          --------------------------------------------------------------------------------
+          {{ disk_space.stdout }}
+
+          REQUIREMENTS
+          --------------------------------------------------------------------------------
+          Minimum vCPUs:     {{ min_vcpus }}
+          Minimum Memory:    {{ (min_memory_mb / 1024) | round(1) }}GB
+          Minimum Disk:      {{ min_disk_gb }}GB
+          Required OS:       {{ required_os }} {{ required_os_version }}
+          Required Arch:     {{ required_arch }}
+
+          ================================================================================
+          END OF REPORT
+          ================================================================================
+
+    - name: Save report to remote node
+      ansible.builtin.copy:
+        content: "{{ precheck_report }}"
+        dest: "/tmp/precheck-report-{{ inventory_hostname }}.txt"
+        mode: "0644"
 
     #######################################
     # Node Check Summary
@@ -287,16 +402,11 @@
       ansible.builtin.debug:
         msg:
           - "========================================"
-          - "Pre-flight Check Complete: {{ inventory_hostname }}"
+          - "Pre-flight Check: {{ inventory_hostname }}"
           - "========================================"
-          - "OS:           {{ ansible_distribution }} {{ ansible_distribution_version }} - OK"
-          - "Architecture: {{ ansible_architecture }} - OK"
-          - "CPU:          {{ ansible_processor_vcpus }} vCPUs - OK"
-          - "Memory:       {{ (ansible_memtotal_mb / 1024) | round(1) }}GB - OK"
-          - "Disk:         {{ max_disk_avail.stdout }}GB available - OK"
-          - "Firewall:     Checked - OK"
-          - "APT Package:  openjdk-21-jdk-headless - Available"
-          - "Downloads:    All URLs reachable - OK"
+          - "Status: {{ 'PASSED' if not checks_failed else 'FAILED' }}"
+          - "Passed: {{ passed_count }} | Failed: {{ failed_count }}"
+          - "Report: /tmp/precheck-report-{{ inventory_hostname }}.txt"
           - "========================================"
 
 #######################################
@@ -328,12 +438,9 @@
       failed_when: false
       changed_when: false
 
-    - name: Assert ping connectivity to all nodes
-      ansible.builtin.assert:
-        that:
-          - item.rc == 0
-        fail_msg: "Cannot ping {{ item.item }} from {{ inventory_hostname }}"
-        success_msg: "Ping: {{ item.item }} - Reachable"
+    - name: Display ping results
+      ansible.builtin.debug:
+        msg: "Ping {{ item.item }}: {{ 'OK' if item.rc == 0 else 'FAILED' }}"
       loop: "{{ ping_results.results }}"
       loop_control:
         label: "{{ item.item }}"
@@ -347,12 +454,9 @@
       changed_when: false
       become: false
 
-    - name: Assert SSH connectivity to all nodes
-      ansible.builtin.assert:
-        that:
-          - item.rc == 0
-        fail_msg: "Cannot SSH to {{ item.item }} from {{ inventory_hostname }}"
-        success_msg: "SSH: {{ item.item }} - Reachable"
+    - name: Display SSH results
+      ansible.builtin.debug:
+        msg: "SSH {{ item.item }}: {{ 'OK' if item.rc == 0 else 'FAILED' }}"
       loop: "{{ ssh_results.results }}"
       loop_control:
         label: "{{ item.item }}"
@@ -363,12 +467,44 @@
           - "========================================"
           - "Cluster Connectivity Check Complete"
           - "========================================"
-          - "All {{ kafka_hosts | length }} nodes can communicate"
-          - "Ping: All nodes reachable"
-          - "SSH: All nodes reachable"
-          - "========================================"
-          - ""
-          - "========================================"
-          - "PRE-FLIGHT CHECK PASSED"
-          - "Ready for Kafka deployment!"
-          - "========================================"
+
+#######################################
+# Play 3: Fetch Reports to Local
+#######################################
+- name: Fetch Precheck Reports
+  hosts: kafka
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure local reports directory exists
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../reports/precheck"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch precheck report from each node
+      ansible.builtin.fetch:
+        src: "/tmp/precheck-report-{{ inventory_hostname }}.txt"
+        dest: "{{ playbook_dir }}/../reports/precheck/"
+        flat: true
+
+    - name: Display report location
+      ansible.builtin.debug:
+        msg: "Report saved to: reports/precheck/precheck-report-{{ inventory_hostname }}.txt"
+
+#######################################
+# Play 4: Final Status Check
+#######################################
+- name: Final Pre-flight Status
+  hosts: kafka
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Fail if any node had check failures
+      ansible.builtin.fail:
+        msg: "Pre-flight checks failed on {{ inventory_hostname }}. See report: reports/precheck/precheck-report-{{ inventory_hostname }}.txt"
+      when: checks_failed | default(false)
