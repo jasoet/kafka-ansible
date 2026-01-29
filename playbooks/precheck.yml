@@ -1,0 +1,64 @@
+---
+# Pre-flight check playbook for Kafka production deployment
+# Run with: ansible-playbook -i inventory playbooks/precheck.yml
+
+#######################################
+# Play 1: Individual Node Checks
+#######################################
+- name: Pre-flight Node Validation
+  hosts: kafka
+  become: true
+  gather_facts: true
+
+  vars:
+    required_os: "Ubuntu"
+    required_os_version: "24.04"
+    required_arch: "aarch64"
+    min_vcpus: 8
+    min_memory_mb: 15360
+    min_disk_gb: 2000
+    kafka_ports:
+      - 9092
+      - 9093
+
+  tasks:
+    #######################################
+    # OS and Architecture Validation
+    #######################################
+    - name: Check OS distribution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == required_os
+        fail_msg: "OS must be {{ required_os }}. Found: {{ ansible_distribution }}"
+        success_msg: "OS: {{ ansible_distribution }} - OK"
+
+    - name: Check OS version
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution_version == required_os_version
+        fail_msg: "OS version must be {{ required_os_version }}. Found: {{ ansible_distribution_version }}"
+        success_msg: "OS Version: {{ ansible_distribution_version }} - OK"
+
+    - name: Check architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_architecture == required_arch
+        fail_msg: "Architecture must be {{ required_arch }}. Found: {{ ansible_architecture }}"
+        success_msg: "Architecture: {{ ansible_architecture }} - OK"
+
+    #######################################
+    # Resource Validation
+    #######################################
+    - name: Check CPU cores
+      ansible.builtin.assert:
+        that:
+          - ansible_processor_vcpus >= min_vcpus
+        fail_msg: "Minimum {{ min_vcpus }} vCPUs required. Found: {{ ansible_processor_vcpus }}"
+        success_msg: "CPU: {{ ansible_processor_vcpus }} vCPUs - OK"
+
+    - name: Check memory
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb >= min_memory_mb
+        fail_msg: "Minimum {{ (min_memory_mb / 1024) | round(1) }}GB RAM required. Found: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
+        success_msg: "Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB - OK"
