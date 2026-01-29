@@ -237,3 +237,45 @@
           - kafka_exp_url_check.status == 200
         fail_msg: "Kafka Exporter download URL not reachable: {{ kafka_exporter_url }} (status: {{ kafka_exp_url_check.status | default('unknown') }})"
         success_msg: "Download: Kafka Exporter ARM64 URL - Reachable"
+
+    #######################################
+    # Kafka Binary Architecture Verification
+    #######################################
+    - name: Create temp directory for Kafka download test
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: kafka_precheck_
+      register: temp_dir
+
+    - name: Download Kafka binary for architecture check
+      ansible.builtin.get_url:
+        url: "{{ kafka_download_url }}"
+        dest: "{{ temp_dir.path }}/kafka.tgz"
+        timeout: 120
+        mode: "0644"
+      register: kafka_download
+
+    - name: Extract Kafka binary
+      ansible.builtin.unarchive:
+        src: "{{ temp_dir.path }}/kafka.tgz"
+        dest: "{{ temp_dir.path }}"
+        remote_src: true
+
+    - name: Find kafka-server-start.sh for verification
+      ansible.builtin.find:
+        paths: "{{ temp_dir.path }}"
+        patterns: "kafka-server-start.sh"
+        recurse: true
+      register: kafka_script
+
+    - name: Verify Kafka scripts are present
+      ansible.builtin.assert:
+        that:
+          - kafka_script.files | length > 0
+        fail_msg: "Kafka binary extraction failed - kafka-server-start.sh not found"
+        success_msg: "Kafka Binary: Extracted successfully - OK"
+
+    - name: Cleanup temp directory
+      ansible.builtin.file:
+        path: "{{ temp_dir.path }}"
+        state: absent
