@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  INVENTORY: '{{.INVENTORY | default "./inventories/test/hosts.yml"}}'
+  INVENTORY: '{{.INVENTORY | default "./inventories/lima/hosts.yml"}}'
 
 tasks:
   lint:
