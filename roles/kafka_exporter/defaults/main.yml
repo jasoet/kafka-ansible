@@ -4,6 +4,6 @@ kafka_exporter_port: 9308
 kafka_exporter_install_dir: "/opt/kafka_exporter"
 kafka_exporter_user: "{{ kafka_user | default('kafka') }}"
 kafka_exporter_group: "{{ kafka_group | default('kafka') }}"
-kafka_exporter_download_url: "https://github.com/danielqsj/kafka_exporter/releases/download/v{{ kafka_exporter_version }}/kafka_exporter-{{ kafka_exporter_version }}.linux-amd64.tar.gz"
+kafka_exporter_download_url: "https://github.com/danielqsj/kafka_exporter/releases/download/v{{ kafka_exporter_version }}/kafka_exporter-{{ kafka_exporter_version }}.linux-arm64.tar.gz"
 kafka_exporter_kafka_server: "localhost:9092"
 kafka_exporter_extra_args: ""
