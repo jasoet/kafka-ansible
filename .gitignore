@@ -55,13 +55,12 @@ vault.yml
 .vault_pass
 
 # Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-terraform/terraform.tfvars
+tests/terraform/.terraform/
+tests/terraform/.terraform.lock.hcl
+tests/terraform/terraform.tfstate
+tests/terraform/terraform.tfstate.backup
+tests/terraform/terraform.tfvars
 
 # Generated test inventory
 inventories/test/hosts.yml
-/terraform/.terraform.tfstate.lock.info
 .ansible/
