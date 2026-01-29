@@ -163,3 +163,77 @@
           - "'(none)' not in java_package_check.stdout"
         fail_msg: "Package openjdk-21-jdk-headless is not available in APT repositories"
         success_msg: "APT Package: openjdk-21-jdk-headless - Available"
+
+    #######################################
+    # Download URL Verification
+    #######################################
+    - name: Define download URLs
+      ansible.builtin.set_fact:
+        kafka_version: "4.1.1"
+        kafka_scala_version: "2.13"
+        jmx_exporter_version: "1.0.1"
+        kafka_exporter_version: "1.8.0"
+
+    - name: Set Kafka download URL
+      ansible.builtin.set_fact:
+        kafka_download_url: >-
+          https://downloads.apache.org/kafka/{{ kafka_version }}/kafka_{{
+          kafka_scala_version }}-{{ kafka_version }}.tgz
+
+    - name: Set JMX Exporter download URL
+      ansible.builtin.set_fact:
+        jmx_exporter_url: >-
+          https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/{{
+          jmx_exporter_version }}/jmx_prometheus_javaagent-{{ jmx_exporter_version }}.jar
+
+    - name: Set Kafka Exporter download URL
+      ansible.builtin.set_fact:
+        kafka_exporter_url: >-
+          https://github.com/danielqsj/kafka_exporter/releases/download/v{{
+          kafka_exporter_version }}/kafka_exporter-{{ kafka_exporter_version }}.linux-arm64.tar.gz
+
+    - name: Check Kafka download URL is reachable
+      ansible.builtin.uri:
+        url: "{{ kafka_download_url }}"
+        method: HEAD
+        timeout: 30
+      register: kafka_url_check
+      failed_when: false
+
+    - name: Assert Kafka download URL is reachable
+      ansible.builtin.assert:
+        that:
+          - kafka_url_check.status == 200
+        fail_msg: "Kafka download URL not reachable: {{ kafka_download_url }} (status: {{ kafka_url_check.status | default('unknown') }})"
+        success_msg: "Download: Kafka binary URL - Reachable"
+
+    - name: Check JMX Exporter download URL is reachable
+      ansible.builtin.uri:
+        url: "{{ jmx_exporter_url }}"
+        method: HEAD
+        timeout: 30
+      register: jmx_url_check
+      failed_when: false
+
+    - name: Assert JMX Exporter download URL is reachable
+      ansible.builtin.assert:
+        that:
+          - jmx_url_check.status == 200
+        fail_msg: "JMX Exporter download URL not reachable: {{ jmx_exporter_url }} (status: {{ jmx_url_check.status | default('unknown') }})"
+        success_msg: "Download: JMX Exporter JAR URL - Reachable"
+
+    - name: Check Kafka Exporter download URL is reachable
+      ansible.builtin.uri:
+        url: "{{ kafka_exporter_url }}"
+        method: HEAD
+        timeout: 30
+        follow_redirects: all
+      register: kafka_exp_url_check
+      failed_when: false
+
+    - name: Assert Kafka Exporter download URL is reachable
+      ansible.builtin.assert:
+        that:
+          - kafka_exp_url_check.status == 200
+        fail_msg: "Kafka Exporter download URL not reachable: {{ kafka_exporter_url }} (status: {{ kafka_exp_url_check.status | default('unknown') }})"
+        success_msg: "Download: Kafka Exporter ARM64 URL - Reachable"
