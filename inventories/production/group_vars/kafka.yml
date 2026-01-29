@@ -1,6 +1,10 @@
 ---
 # Override defaults for production environment
 
+# SSH settings
+ansible_user: ubuntu
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
 # Resource settings - adjust based on VM size
 # kafka_heap_size: "6g"
 
