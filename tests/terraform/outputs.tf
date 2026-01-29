@@ -23,7 +23,7 @@ resource "local_file" "inventory" {
       "${idx + 1}@${instance.main_ip}:9093"
     ])
   })
-  filename        = "${path.module}/../inventories/test/hosts.yml"
+  filename        = "${path.module}/../../inventories/test/hosts.yml"
   file_permission = "0644"
 }
 

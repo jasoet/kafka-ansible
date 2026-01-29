@@ -77,7 +77,7 @@ Testing uses Terraform to provision real VMs on Vultr:
 
 ```bash
 # Configure Vultr credentials
-cd terraform
+cd tests/terraform
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with your Vultr API key
 
@@ -86,10 +86,26 @@ terraform init
 terraform apply
 
 # Run playbook against test cluster
-uv run ansible-playbook playbooks/kafka.yml -i ../inventories/test/hosts.yml
+uv run ansible-playbook playbooks/kafka.yml -i ../../inventories/test/hosts.yml
 
 # Destroy test VMs when done
 terraform destroy
+```
+
+Or use Task commands:
+
+```bash
+# Full test cycle
+task test:full
+
+# Just create VMs
+task test:infra:up
+
+# Deploy to test VMs
+task ansible:deploy
+
+# Destroy VMs
+task test:infra:down
 ```
 
 ## VM Sizing

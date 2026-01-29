@@ -4,11 +4,11 @@ tasks:
   full:
     desc: Full test cycle (up → deploy → verify → down)
     cmds:
-      - task: ":infra:up"
+      - task: ":test:infra:up"
       - task: wait-for-ssh
       - task: ":ansible:deploy"
       - task: ":ansible:verify"
-      - defer: { task: ":infra:down" }
+      - defer: { task: ":test:infra:down" }
     env:
       VULTR_API_KEY: "{{.VULTR_API_KEY}}"
 

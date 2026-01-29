@@ -19,7 +19,7 @@ variable "region" {
 variable "plan" {
   description = "Vultr VM plan"
   type        = string
-  default     = "vc2-1c-1gb"
+  default     = "vc2-2c-4gb"
 }
 
 variable "os_id" {

@@ -1,14 +1,14 @@
 version: '3'
 
 vars:
-  TERRAFORM_DIR: ./terraform
+  TERRAFORM_DIR: ./tests/terraform
   INVENTORY_TEST: ./inventories/test/hosts.yml
   INVENTORY_PROD: ./inventories/production/hosts.yml
 
 includes:
-  infra: ./.taskfiles/infra.yml
   ansible: ./.taskfiles/ansible.yml
   test: ./.taskfiles/test.yml
+  test:infra: ./.taskfiles/test-infra.yml
 
 tasks:
   default:

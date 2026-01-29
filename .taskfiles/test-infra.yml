@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  TF_DIR: ./terraform
+  TF_DIR: ./tests/terraform
 
 tasks:
   init:
@@ -32,7 +32,7 @@ tasks:
     dir: "{{.TF_DIR}}"
     cmds:
       - terraform destroy -auto-approve
-      - rm -f ../inventories/test/hosts.yml
+      - rm -f ../../inventories/test/hosts.yml
       - echo "Test VMs destroyed and inventory removed"
     env:
       TF_VAR_vultr_api_key: "{{.VULTR_API_KEY}}"
@@ -46,11 +46,11 @@ tasks:
           echo "=== Test VM Status ==="
           terraform output -json instance_ips 2>/dev/null | jq -r 'to_entries[] | "\(.key): \(.value)"' || echo "No VMs running"
         else
-          echo "No Terraform state found. Run 'task infra:up' first."
+          echo "No Terraform state found. Run 'task test:infra:up' first."
         fi
 
   ssh:
-    desc: "SSH into a test VM (usage: task infra:ssh -- kafka-test-1)"
+    desc: "SSH into a test VM (usage: task test:infra:ssh -- kafka-test-1)"
     dir: "{{.TF_DIR}}"
     cmds:
       - |
