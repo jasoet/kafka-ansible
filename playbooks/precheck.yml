@@ -103,3 +103,41 @@
           - max_disk_avail.stdout | int >= min_disk_gb
         fail_msg: "Minimum {{ min_disk_gb }}GB disk space required. Largest available: {{ max_disk_avail.stdout }}GB"
         success_msg: "Disk Space: {{ max_disk_avail.stdout }}GB available - OK"
+
+    #######################################
+    # Firewall Validation
+    #######################################
+    - name: Check if UFW is installed
+      ansible.builtin.command:
+        cmd: which ufw
+      register: ufw_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Get UFW status
+      ansible.builtin.command:
+        cmd: ufw status
+      register: ufw_status
+      when: ufw_installed.rc == 0
+      changed_when: false
+
+    - name: Display UFW status
+      ansible.builtin.debug:
+        msg: "Firewall: {{ ufw_status.stdout | default('UFW not installed') }}"
+      when: ufw_installed.rc == 0
+
+    - name: Check UFW allows Kafka ports or is inactive
+      ansible.builtin.assert:
+        that:
+          - >
+            ufw_installed.rc != 0 or
+            'inactive' in ufw_status.stdout | lower or
+            (kafka_ports | map('string') | map('regex_search', ufw_status.stdout) | select('string') | list | length == kafka_ports | length)
+        fail_msg: "UFW is active but ports {{ kafka_ports }} are not allowed. Run: sudo ufw allow 9092/tcp && sudo ufw allow 9093/tcp"
+        success_msg: "Firewall: Kafka ports allowed or UFW inactive - OK"
+      when: ufw_installed.rc == 0
+
+    - name: Firewall not installed message
+      ansible.builtin.debug:
+        msg: "Firewall: UFW not installed - OK"
+      when: ufw_installed.rc != 0
