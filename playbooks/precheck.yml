@@ -62,3 +62,44 @@
           - ansible_memtotal_mb >= min_memory_mb
         fail_msg: "Minimum {{ (min_memory_mb / 1024) | round(1) }}GB RAM required. Found: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
         success_msg: "Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB - OK"
+
+    #######################################
+    # Disk Layout and Space Validation
+    #######################################
+    - name: Get fstab contents
+      ansible.builtin.slurp:
+        src: /etc/fstab
+      register: fstab_content
+
+    - name: Parse and display fstab entries
+      ansible.builtin.debug:
+        msg: |
+          Disk Layout from /etc/fstab:
+          {{ fstab_content.content | b64decode }}
+
+    - name: Get mount points and available space
+      ansible.builtin.shell:
+        cmd: set -o pipefail; df -BG --output=target,size,avail,fstype | grep -v tmpfs | grep -v udev
+        executable: /bin/bash
+      register: disk_space
+      changed_when: false
+
+    - name: Display disk space
+      ansible.builtin.debug:
+        msg: |
+          Disk Space:
+          {{ disk_space.stdout }}
+
+    - name: Get largest available disk space in GB
+      ansible.builtin.shell:
+        cmd: set -o pipefail; df -BG --output=avail | tail -n +2 | sed 's/G//' | sort -rn | head -1
+        executable: /bin/bash
+      register: max_disk_avail
+      changed_when: false
+
+    - name: Check disk space meets minimum
+      ansible.builtin.assert:
+        that:
+          - max_disk_avail.stdout | int >= min_disk_gb
+        fail_msg: "Minimum {{ min_disk_gb }}GB disk space required. Largest available: {{ max_disk_avail.stdout }}GB"
+        success_msg: "Disk Space: {{ max_disk_avail.stdout }}GB available - OK"
