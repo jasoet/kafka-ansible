@@ -13,23 +13,20 @@
 - name: Auto-detect disk device if not specified
   when: disk_mount_device == ""
   block:
-    - name: Get list of block devices
-      ansible.builtin.command:
-        cmd: lsblk -dnpo NAME,TYPE,FSTYPE,SIZE --bytes
+    - name: Get list of unformatted disks
+      ansible.builtin.shell:
+        cmd: |
+          lsblk -dnpo NAME,TYPE,FSTYPE,SIZE --bytes | while read name type fstype size; do
+            if [ "$type" = "disk" ] && [ -z "$fstype" ]; then
+              echo "$size $name"
+            fi
+          done | sort -rn | head -1 | awk '{print $2}'
       register: lsblk_output
       changed_when: false
 
-    - name: Find largest unformatted disk
+    - name: Set detected disk device
       ansible.builtin.set_fact:
-        disk_mount_device: >-
-          {{ lsblk_output.stdout_lines
-             | map('split')
-             | selectattr('1', 'equalto', 'disk')
-             | selectattr('2', 'equalto', '')
-             | sort(attribute='3', reverse=true)
-             | map(attribute='0')
-             | first
-             | default('') }}
+        disk_mount_device: "{{ lsblk_output.stdout | trim }}"
 
     - name: Fail if no unformatted disk found
       ansible.builtin.fail:
