@@ -15,7 +15,7 @@
   block:
     - name: Get list of block devices (JSON)
       ansible.builtin.command:
-        cmd: lsblk -o NAME,TYPE,FSTYPE,SIZE --json --bytes
+        cmd: lsblk -po NAME,TYPE,FSTYPE,SIZE --json --bytes
       register: lsblk_output
       changed_when: false
 
@@ -31,14 +31,10 @@
              | first
              | default('') }}
 
-    - name: Prepend /dev/ to device name if needed
-      ansible.builtin.set_fact:
-        disk_mount_device: "{{ '/dev/' + disk_mount_device if disk_mount_device and not disk_mount_device.startswith('/dev/') else disk_mount_device }}"
-
-    - name: Fail if no unformatted disk found
-      ansible.builtin.fail:
-        msg: "No unformatted disk found for auto-detection"
-      when: disk_mount_device == ""
+- name: Fail if no unformatted disk found
+  ansible.builtin.fail:
+    msg: "No unformatted disk found for auto-detection"
+  when: disk_mount_device == ""
 
 - name: Display target disk
   ansible.builtin.debug:
