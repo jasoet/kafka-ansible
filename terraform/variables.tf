@@ -13,7 +13,7 @@ variable "ssh_key_id" {
 variable "region" {
   description = "Vultr region"
   type        = string
-  default     = "nrt"
+  default     = "sgp"
 }
 
 variable "plan" {
