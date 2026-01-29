@@ -9,7 +9,7 @@ controller.listener.names=CONTROLLER
 
 ############################# Socket Server Settings #############################
 listeners=PLAINTEXT://:{{ kafka_port }},CONTROLLER://:{{ kafka_controller_port }}
-advertised.listeners=PLAINTEXT://{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:{{ kafka_port }}
+advertised.listeners=PLAINTEXT://{{ kafka_internal_ip | default(ansible_facts['default_ipv4']['address']) | default(ansible_host) }}:{{ kafka_port }}
 inter.broker.listener.name=PLAINTEXT
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
 
