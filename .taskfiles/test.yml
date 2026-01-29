@@ -9,8 +9,6 @@ tasks:
       - task: ":ansible:deploy"
       - task: ":ansible:verify"
       - defer: { task: ":test:infra:down" }
-    env:
-      VULTR_API_KEY: "{{.VULTR_API_KEY}}"
 
   quick:
     desc: Quick test (deploy → verify, assumes VMs exist)
@@ -28,16 +26,21 @@ tasks:
     cmds:
       - |
         echo "Waiting for SSH to be available..."
-        INVENTORY=./inventories/test/hosts.yml
+        INVENTORY=./inventories/lima/hosts.yml
         if [ ! -f "$INVENTORY" ]; then
-          echo "Inventory not found"
+          echo "Inventory not found at $INVENTORY"
           exit 1
         fi
-        HOSTS=$(grep "ansible_host:" $INVENTORY | awk '{print $2}')
-        for HOST in $HOSTS; do
-          echo -n "Waiting for $HOST... "
+
+        # Extract hosts and ports from YAML inventory
+        HOSTS=$(grep -A2 "ansible_host:" $INVENTORY | grep -E "ansible_host|ansible_port" | paste - - | awk '{print $2 ":" $4}')
+
+        for HOSTPORT in $HOSTS; do
+          HOST=$(echo $HOSTPORT | cut -d: -f1)
+          PORT=$(echo $HOSTPORT | cut -d: -f2)
+          echo -n "Waiting for $HOST:$PORT... "
           for i in $(seq 1 30); do
-            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes root@$HOST exit 2>/dev/null; then
+            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -p $PORT $USER@$HOST exit 2>/dev/null; then
               echo "ready"
               break
             fi
@@ -45,7 +48,7 @@ tasks:
               echo "timeout"
               exit 1
             fi
-            sleep 5
+            sleep 2
           done
         done
         echo "All hosts ready"
