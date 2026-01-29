@@ -21,6 +21,9 @@
     url: "{{ kafka_download_url }}"
     dest: "{{ kafka_download_dest }}"
     mode: "0644"
+    timeout: 300
+  retries: 3
+  delay: 5
   when: not kafka_installed.stat.exists
 
 - name: Create versioned install directory
