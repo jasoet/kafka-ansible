@@ -10,7 +10,7 @@ from pathlib import Path
 TEMPLATE_PATH = Path(__file__).parent / "kafka-node.yaml"
 INVENTORY_PATH = Path(__file__).parent.parent.parent / "inventories" / "lima" / "hosts.yml"
 VM_PREFIX = "kafka"
-DISK_NAME = "data"
+DISK_PREFIX = "kafka-data"
 DISK_SIZE = "10G"
 
 
@@ -32,21 +32,42 @@ def disk_exists(name: str) -> bool:
     return False
 
 
-def ensure_disk() -> None:
-    """Ensure the data disk exists, create if not."""
-    if disk_exists(DISK_NAME):
-        print(f"Disk '{DISK_NAME}' already exists")
-        return
-    print(f"Creating disk '{DISK_NAME}' ({DISK_SIZE})...")
-    run_cmd(["limactl", "disk", "create", DISK_NAME, "--size", DISK_SIZE, "--format", "raw"])
+def get_disk_name(vm_index: int) -> str:
+    """Get disk name for a VM index."""
+    return f"{DISK_PREFIX}-{vm_index}"
 
 
-def delete_disk() -> None:
-    """Delete the data disk if it exists and is not in use."""
-    if not disk_exists(DISK_NAME):
+def ensure_disk(vm_index: int) -> None:
+    """Ensure the data disk for a VM exists, create if not."""
+    disk_name = get_disk_name(vm_index)
+    if disk_exists(disk_name):
+        print(f"Disk '{disk_name}' already exists")
         return
-    print(f"Deleting disk '{DISK_NAME}'...")
-    run_cmd(["limactl", "disk", "delete", DISK_NAME], check=False)
+    print(f"Creating disk '{disk_name}' ({DISK_SIZE})...")
+    run_cmd(["limactl", "disk", "create", disk_name, "--size", DISK_SIZE, "--format", "raw"])
+
+
+def delete_disk(vm_index: int) -> None:
+    """Delete the data disk for a VM if it exists."""
+    disk_name = get_disk_name(vm_index)
+    if not disk_exists(disk_name):
+        return
+    print(f"Deleting disk '{disk_name}'...")
+    run_cmd(["limactl", "disk", "delete", disk_name], check=False)
+
+
+def delete_all_disks() -> None:
+    """Delete all kafka data disks."""
+    result = run_cmd(["limactl", "disk", "list", "--json"], capture=True, check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return
+    for line in result.stdout.strip().split("\n"):
+        if line:
+            disk = json.loads(line)
+            disk_name = disk.get("name", "")
+            if disk_name.startswith(DISK_PREFIX):
+                print(f"Deleting disk '{disk_name}'...")
+                run_cmd(["limactl", "disk", "delete", disk_name], check=False)
 
 
 def get_vm_list() -> list[dict]:
@@ -64,12 +85,28 @@ def get_vm_list() -> list[dict]:
     return vms
 
 
+def generate_vm_template(vm_index: int) -> Path:
+    """Generate a VM template with the correct disk name."""
+    import yaml
+
+    with open(TEMPLATE_PATH) as f:
+        template = yaml.safe_load(f)
+
+    # Update disk name for this VM
+    disk_name = get_disk_name(vm_index)
+    template["additionalDisks"] = [{"name": disk_name, "format": False}]
+
+    # Write temporary template
+    temp_template = TEMPLATE_PATH.parent / f"kafka-node-{vm_index}.yaml"
+    with open(temp_template, "w") as f:
+        yaml.dump(template, f, default_flow_style=False, sort_keys=False)
+
+    return temp_template
+
+
 def create(nodes: int = 1) -> None:
     """Create Kafka test VMs."""
     print(f"Creating {nodes} Kafka VM(s)...")
-
-    # Ensure data disk exists
-    ensure_disk()
 
     for i in range(1, nodes + 1):
         name = f"{VM_PREFIX}-{i}"
@@ -81,13 +118,22 @@ def create(nodes: int = 1) -> None:
             print(f"{name} already exists, skipping...")
             continue
 
+        # Ensure disk for this VM exists
+        ensure_disk(i)
+
+        # Generate template with correct disk name
+        vm_template = generate_vm_template(i)
+
         # Create VM
         run_cmd([
             "limactl", "create",
             "--name", name,
             "--tty=false",
-            str(TEMPLATE_PATH)
+            str(vm_template)
         ])
+
+        # Clean up temporary template
+        vm_template.unlink()
 
         # Start VM
         print(f"Starting {name}...")
@@ -117,8 +163,8 @@ def destroy() -> None:
         INVENTORY_PATH.unlink()
         print(f"Removed {INVENTORY_PATH}")
 
-    # Delete the data disk
-    delete_disk()
+    # Delete all data disks
+    delete_all_disks()
 
     print("All Kafka VMs destroyed.")
 
