@@ -82,3 +82,13 @@ tasks:
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Production inventory not found: {{.INVENTORY}}"
+
+  precheck:prod:
+    desc: Run pre-flight checks on production VMs before deployment
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/precheck.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
