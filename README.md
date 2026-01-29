@@ -13,7 +13,7 @@ Ansible roles and playbook to deploy a production-ready Apache Kafka cluster usi
 
 - Ubuntu 24.04 LTS target hosts
 - Python 3.11+ with uv
-- Podman (for testing)
+- Terraform (for testing with Vultr VMs)
 - SSH access to target hosts
 
 ## Quick Start
@@ -73,12 +73,23 @@ See `roles/kafka/defaults/main.yml` for all options.
 
 ## Testing
 
-```bash
-# Test individual role
-cd roles/java && uv run molecule test
+Testing uses Terraform to provision real VMs on Vultr:
 
-# Test full cluster
-uv run molecule test
+```bash
+# Configure Vultr credentials
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your Vultr API key
+
+# Create test VMs
+terraform init
+terraform apply
+
+# Run playbook against test cluster
+uv run ansible-playbook playbooks/kafka.yml -i ../inventories/test/hosts.yml
+
+# Destroy test VMs when done
+terraform destroy
 ```
 
 ## VM Sizing
