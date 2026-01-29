@@ -64,3 +64,4 @@ tests/terraform/terraform.tfvars
 # Generated test inventory
 inventories/test/hosts.yml
 .ansible/reports/
+reports/
