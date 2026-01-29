@@ -113,14 +113,69 @@
       register: max_disk_avail
       changed_when: false
 
-    - name: Check disk space
+    - name: Get block devices
+      ansible.builtin.command:
+        cmd: lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE -J
+      register: lsblk_output
+      changed_when: false
+
+    - name: Parse block devices
+      ansible.builtin.set_fact:
+        block_devices: "{{ (lsblk_output.stdout | from_json).blockdevices }}"
+
+    - name: Get block devices formatted output
+      ansible.builtin.command:
+        cmd: lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE
+      register: lsblk_formatted
+      changed_when: false
+
+    - name: Find available unformatted disks
+      ansible.builtin.set_fact:
+        unformatted_disks: >-
+          {{ block_devices | selectattr('type', 'eq', 'disk')
+                           | selectattr('mountpoint', 'none')
+                           | rejectattr('children', 'defined')
+                           | list }}
+
+    - name: Find disks without children (unpartitioned)
+      ansible.builtin.set_fact:
+        available_disks: >-
+          {{ block_devices | selectattr('type', 'eq', 'disk')
+                           | selectattr('mountpoint', 'none')
+                           | list
+                           | selectattr('children', 'undefined')
+                           | list }}
+
+    - name: Calculate largest available disk size in GB
+      ansible.builtin.set_fact:
+        largest_available_disk_gb: >-
+          {% set sizes = [] %}
+          {% for disk in available_disks %}
+          {% set size_str = disk.size | default('0') %}
+          {% if 'T' in size_str %}
+          {% set _ = sizes.append((size_str | regex_replace('[^0-9.]', '') | float * 1024) | int) %}
+          {% elif 'G' in size_str %}
+          {% set _ = sizes.append((size_str | regex_replace('[^0-9.]', '') | float) | int) %}
+          {% endif %}
+          {% endfor %}
+          {{ sizes | max | default(0) }}
+
+    - name: Check disk space (mounted or available)
+      ansible.builtin.set_fact:
+        disk_check_passed: >-
+          {{ (max_disk_avail.stdout | trim | int) >= min_disk_gb or
+             (largest_available_disk_gb | int) >= min_disk_gb }}
+
+    - name: Record disk check result
       ansible.builtin.set_fact:
         check_results: >-
           {{ check_results | combine({
             'disk_space': {
-              'status': 'PASS' if (max_disk_avail.stdout | trim | int) >= min_disk_gb else 'FAIL',
+              'status': 'PASS' if disk_check_passed else 'FAIL',
               'minimum_gb': min_disk_gb,
-              'actual_gb': max_disk_avail.stdout | trim
+              'mounted_available_gb': max_disk_avail.stdout | trim,
+              'largest_unformatted_disk_gb': largest_available_disk_gb | int,
+              'available_disks': available_disks | map(attribute='name') | list
             }
           }) }}
 
@@ -159,6 +214,10 @@
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
+      retries: 3
+      delay: 10
+      register: apt_update
+      until: apt_update is success
 
     - name: Check if OpenJDK 21 is available
       ansible.builtin.command:
@@ -376,6 +435,10 @@
           MOUNT POINTS
           --------------------------------------------------------------------------------
           {{ disk_space.stdout }}
+
+          BLOCK DEVICES
+          --------------------------------------------------------------------------------
+          {{ lsblk_formatted.stdout }}
 
           REQUIREMENTS
           --------------------------------------------------------------------------------
