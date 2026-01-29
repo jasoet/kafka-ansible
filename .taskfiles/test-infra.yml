@@ -1,67 +1,38 @@
 version: '3'
 
 vars:
-  TF_DIR: ./tests/terraform
+  LIMA_DIR: ./tests/lima
 
 tasks:
-  init:
-    desc: Initialize Terraform
-    dir: "{{.TF_DIR}}"
-    cmds:
-      - terraform init
-    status:
-      - test -d .terraform
-
   up:
-    desc: Create Vultr test VMs
-    dir: "{{.TF_DIR}}"
-    deps:
-      - init
+    desc: Create Lima test VMs (use -- --nodes N for multiple)
+    dir: "{{.LIMA_DIR}}"
     cmds:
-      - terraform apply -auto-approve
-      - echo ""
-      - echo "=== Test VMs Created ==="
-      - 'terraform output -json instance_ips | jq -r ''to_entries[] | "\(.key): \(.value)"'''
-      - echo ""
-      - echo "Inventory generated at inventories/test/hosts.yml"
-    env:
-      TF_VAR_vultr_api_key: "{{.VULTR_API_KEY}}"
+      - uv run cluster.py create {{.CLI_ARGS}}
+      - uv run cluster.py inventory
+    sources:
+      - kafka-node.yaml
+      - cluster.py
 
   down:
-    desc: Destroy Vultr test VMs
-    dir: "{{.TF_DIR}}"
+    desc: Destroy Lima test VMs
+    dir: "{{.LIMA_DIR}}"
     cmds:
-      - terraform destroy -auto-approve
-      - rm -f ../../inventories/test/hosts.yml
-      - echo "Test VMs destroyed and inventory removed"
-    env:
-      TF_VAR_vultr_api_key: "{{.VULTR_API_KEY}}"
+      - uv run cluster.py destroy
 
   status:
-    desc: Show test VM status
-    dir: "{{.TF_DIR}}"
+    desc: Show Lima VM status
+    dir: "{{.LIMA_DIR}}"
     cmds:
-      - |
-        if [ -f terraform.tfstate ]; then
-          echo "=== Test VM Status ==="
-          terraform output -json instance_ips 2>/dev/null | jq -r 'to_entries[] | "\(.key): \(.value)"' || echo "No VMs running"
-        else
-          echo "No Terraform state found. Run 'task test:infra:up' first."
-        fi
+      - uv run cluster.py status
 
   ssh:
-    desc: "SSH into a test VM (usage: task test:infra:ssh -- kafka-test-1)"
-    dir: "{{.TF_DIR}}"
+    desc: "SSH into a test VM (usage: task test:infra:ssh -- 1)"
     cmds:
-      - |
-        HOST="{{.CLI_ARGS}}"
-        if [ -z "$HOST" ]; then
-          HOST="kafka-test-1"
-        fi
-        IP=$(terraform output -json instance_ips | jq -r ".[\"$HOST\"]")
-        if [ "$IP" != "null" ] && [ -n "$IP" ]; then
-          ssh -o StrictHostKeyChecking=no root@$IP
-        else
-          echo "Host $HOST not found. Available hosts:"
-          terraform output -json instance_ips | jq -r 'keys[]'
-        fi
+      - limactl shell kafka-{{.CLI_ARGS | default "1"}}
+
+  inventory:
+    desc: Regenerate Ansible inventory from running VMs
+    dir: "{{.LIMA_DIR}}"
+    cmds:
+      - uv run cluster.py inventory
