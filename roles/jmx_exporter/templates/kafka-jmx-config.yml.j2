@@ -65,28 +65,4 @@ rules:
       topic: "$3"
       partition: "$4"
 
-  # JVM metrics
-  - pattern: java.lang<type=Memory><HeapMemoryUsage>(\w+)
-    name: jvm_memory_heap_$1_bytes
-    type: GAUGE
-
-  - pattern: java.lang<type=Memory><NonHeapMemoryUsage>(\w+)
-    name: jvm_memory_nonheap_$1_bytes
-    type: GAUGE
-
-  - pattern: java.lang<type=GarbageCollector, name=(.+)><>CollectionCount
-    name: jvm_gc_collection_count_total
-    type: COUNTER
-    labels:
-      gc: "$1"
-
-  - pattern: java.lang<type=GarbageCollector, name=(.+)><>CollectionTime
-    name: jvm_gc_collection_time_seconds_total
-    type: COUNTER
-    labels:
-      gc: "$1"
-    valueFactor: 0.001
-
-  - pattern: java.lang<type=Threading><>ThreadCount
-    name: jvm_threads_current
-    type: GAUGE
+  # JVM metrics are automatically collected by JMX exporter 1.0+

@@ -1,5 +1,5 @@
 ---
-jmx_exporter_version: "1.1.0"
+jmx_exporter_version: "1.0.1"
 jmx_exporter_port: 7071
 jmx_exporter_install_dir: "/opt/jmx_exporter"
 jmx_exporter_config_file: "{{ kafka_config_dir | default('/etc/kafka') }}/jmx-exporter.yml"

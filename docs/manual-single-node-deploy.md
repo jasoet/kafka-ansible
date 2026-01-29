@@ -1,121 +1,103 @@
-# Manual Single Node Kafka Deployment
+# Single Node Kafka Testing Guide
 
-Test VM: `45.76.153.107`
+Step-by-step guide to deploy and test Kafka on a single VM from your local machine.
 
-## 1. SSH into the VM
+## Prerequisites
 
-```bash
-ssh root@45.76.153.107
-```
+- [uv](https://docs.astral.sh/uv/) - Python package manager
+- [task](https://taskfile.dev/) - Task runner
+- [terraform](https://www.terraform.io/) - Infrastructure provisioning
+- Vultr API key exported as `VULTR_API_KEY`
 
-## 2. Install Java
+## 1. Create Single VM
 
-```bash
-apt update && apt install -y openjdk-21-jdk
-```
-
-## 3. Verify Java
+Scale down to 1 instance and apply:
 
 ```bash
-java -version
+cd terraform
+terraform apply -var="instance_count=1" -auto-approve
 ```
 
-## 4. Create kafka user
+Note the IP address from the output.
+
+## 2. Wait for SSH
 
 ```bash
-groupadd kafka
-useradd -r -g kafka -s /sbin/nologin kafka
+task test:wait-for-ssh
 ```
 
-## 5. Create directories
+## 3. Verify Connectivity
 
 ```bash
-mkdir -p /opt/kafka /data/kafka /var/log/kafka /etc/kafka
-chown -R kafka:kafka /data/kafka /var/log/kafka /etc/kafka
+task ansible:ping
 ```
 
-## 6. Download and extract Kafka
+## 4. Deploy Kafka
 
 ```bash
-cd /tmp
-wget https://downloads.apache.org/kafka/4.1.1/kafka_2.13-4.1.1.tgz
-tar -xzf kafka_2.13-4.1.1.tgz -C /opt/kafka --strip-components=1
-chown -R kafka:kafka /opt/kafka
+# Deploy to kafka-test-1 (default)
+task ansible:deploy:single
+
+# Or specify a target VM
+task ansible:deploy:single -- kafka-test-2
 ```
 
-## 7. Generate cluster ID
+## 5. Verify Deployment
 
 ```bash
-CLUSTER_ID=$(/opt/kafka/bin/kafka-storage.sh random-uuid)
-echo $CLUSTER_ID
+task ansible:verify
 ```
 
-## 8. Create server.properties
+## 6. Manual Testing (Optional)
+
+SSH into the VM:
 
 ```bash
-cat > /etc/kafka/server.properties << 'EOF'
-node.id=1
-process.roles=broker,controller
-listeners=PLAINTEXT://:9092,CONTROLLER://:9093
-advertised.listeners=PLAINTEXT://45.76.153.107:9092
-controller.listener.names=CONTROLLER
-controller.quorum.voters=1@localhost:9093
-log.dirs=/data/kafka
-num.partitions=1
-offsets.topic.replication.factor=1
-transaction.state.log.replication.factor=1
-transaction.state.log.min.isr=1
-EOF
+task infra:ssh -- kafka-test-1
 ```
 
-## 9. Format storage
-
-```bash
-/opt/kafka/bin/kafka-storage.sh format -t $CLUSTER_ID -c /etc/kafka/server.properties
-```
-
-## 10. Start Kafka (foreground)
-
-```bash
-/opt/kafka/bin/kafka-server-start.sh /etc/kafka/server.properties
-```
-
----
-
-## Testing (in another terminal)
-
-Open a new terminal and SSH again:
-
-```bash
-ssh root@45.76.153.107
-```
-
-### Create topic
+Create a test topic:
 
 ```bash
 /opt/kafka/bin/kafka-topics.sh --create --topic test --bootstrap-server localhost:9092
 ```
 
-### List topics
+List topics:
 
 ```bash
 /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 ```
 
-### Produce message
+Produce a message:
 
 ```bash
 echo "hello kafka" | /opt/kafka/bin/kafka-console-producer.sh --topic test --bootstrap-server localhost:9092
 ```
 
-### Consume message
+Consume the message:
 
 ```bash
 /opt/kafka/bin/kafka-console-consumer.sh --topic test --from-beginning --bootstrap-server localhost:9092 --max-messages 1
 ```
 
----
+Exit SSH with `exit`.
 
-## Cleanup
+## 7. Cleanup
 
-Stop Kafka with `Ctrl+C` in the first terminal.
+Destroy the VM:
+
+```bash
+task infra:down
+```
+
+## Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `task ansible:ping` | Test connectivity |
+| `task ansible:deploy:single -- kafka-test-N` | Deploy Kafka to single VM |
+| `task ansible:deploy` | Deploy Kafka to all VMs |
+| `task ansible:verify` | Run verification playbook |
+| `task infra:status` | Show VM IPs |
+| `task infra:ssh -- kafka-test-1` | SSH into VM |
+| `task infra:down` | Destroy VMs |

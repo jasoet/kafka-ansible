@@ -1,8 +1,0 @@
----
-- name: Converge
-  hosts: kafka
-  become: true
-
-  roles:
-    - role: java
-    - role: kafka

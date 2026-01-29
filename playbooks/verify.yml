@@ -93,7 +93,7 @@
       ansible.builtin.assert:
         that:
           - kafka_install_stat.stat.exists
-          - kafka_install_stat.stat.isdir
+          - kafka_install_stat.stat.isdir or kafka_install_stat.stat.islnk
         fail_msg: "Kafka install directory {{ kafka_install_dir }} does not exist"
         success_msg: "Kafka install directory {{ kafka_install_dir }} exists"
 
@@ -291,7 +291,7 @@
   vars:
     kafka_install_dir: "/opt/kafka"
     kafka_port: 9092
-    test_topic: "verification-test-{{ ansible_date_time.epoch }}"
+    test_topic: "verification-test-{{ ansible_facts['date_time']['epoch'] | default('unknown') }}"
 
   tasks:
     - name: Gather date/time facts
@@ -301,7 +301,7 @@
 
     - name: Set test topic name
       ansible.builtin.set_fact:
-        test_topic: "verification-test-{{ ansible_date_time.epoch }}"
+        test_topic: "verification-test-{{ ansible_facts['date_time']['epoch'] }}"
 
     - name: Debug - Starting cluster health verification
       ansible.builtin.debug:
@@ -377,9 +377,10 @@
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
-          echo "verification-message-{{ ansible_date_time.epoch }}" | {{ kafka_install_dir }}/bin/kafka-console-producer.sh \
+          echo "verification-message-{{ ansible_facts['date_time']['epoch'] }}" | {{ kafka_install_dir }}/bin/kafka-console-producer.sh \
             --bootstrap-server localhost:{{ kafka_port }} \
             --topic {{ test_topic }}
+        executable: /bin/bash
       register: produce_message
       changed_when: true
 

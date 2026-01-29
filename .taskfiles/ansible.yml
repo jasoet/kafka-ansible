@@ -28,10 +28,26 @@ tasks:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
 
+  deploy:single:
+    desc: "Deploy Kafka to single VM (usage: task ansible:deploy:single -- kafka-test-1)"
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml --limit {{.CLI_ARGS | default "kafka-test-1"}}
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+
   verify:
     desc: Verify Kafka cluster deployment
     cmds:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+
+  verify:single:
+    desc: "Verify single VM (usage: task ansible:verify:single -- kafka-test-1)"
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml --limit {{.CLI_ARGS | default "kafka-test-1"}}
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
