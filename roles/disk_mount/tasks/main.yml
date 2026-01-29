@@ -15,20 +15,25 @@
   block:
     - name: Get list of block devices (JSON)
       ansible.builtin.command:
-        cmd: lsblk -dnpo NAME,TYPE,FSTYPE,SIZE --json --bytes
+        cmd: lsblk -o NAME,TYPE,FSTYPE,SIZE --json --bytes
       register: lsblk_output
       changed_when: false
 
-    - name: Find largest unformatted disk
+    - name: Find largest unformatted disk (no partitions, no filesystem)
       ansible.builtin.set_fact:
         disk_mount_device: >-
           {{ (lsblk_output.stdout | from_json).blockdevices
              | selectattr('type', 'equalto', 'disk')
              | selectattr('fstype', 'none')
+             | rejectattr('children', 'defined')
              | sort(attribute='size', reverse=true)
              | map(attribute='name')
              | first
              | default('') }}
+
+    - name: Prepend /dev/ to device name if needed
+      ansible.builtin.set_fact:
+        disk_mount_device: "{{ '/dev/' + disk_mount_device if disk_mount_device and not disk_mount_device.startswith('/dev/') else disk_mount_device }}"
 
     - name: Fail if no unformatted disk found
       ansible.builtin.fail:
