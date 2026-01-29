@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  INVENTORY: '{{.INVENTORY | default "./inventories/lima/hosts.yml"}}'
+  INVENTORY: '{{.INVENTORY | default "./inventories/production/hosts.yml"}}'
 
 tasks:
   lint:
@@ -26,7 +26,7 @@ tasks:
     preconditions:
       - test -f {{.INVENTORY}}
       - sh: "test -f {{.INVENTORY}}"
-        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+        msg: "Inventory file not found: {{.INVENTORY}}"
 
   deploy:single:
     desc: "Deploy Kafka to single VM (usage: task ansible:deploy:single -- kafka-test-1)"
@@ -34,7 +34,7 @@ tasks:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml --limit {{.CLI_ARGS | default "kafka-test-1"}}
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
-        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+        msg: "Inventory file not found: {{.INVENTORY}}"
 
   verify:
     desc: Verify Kafka cluster deployment
@@ -42,7 +42,7 @@ tasks:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
-        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+        msg: "Inventory file not found: {{.INVENTORY}}"
 
   verify:single:
     desc: "Verify single VM (usage: task ansible:verify:single -- kafka-test-1)"
@@ -50,7 +50,7 @@ tasks:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml --limit {{.CLI_ARGS | default "kafka-test-1"}}
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
-        msg: "Inventory file not found: {{.INVENTORY}}. Run 'task infra:up' first."
+        msg: "Inventory file not found: {{.INVENTORY}}"
 
   deploy:prod:
     desc: Deploy to production (requires confirmation)

@@ -1,14 +1,10 @@
 version: '3'
 
 vars:
-  LIMA_DIR: ./tests/lima
-  INVENTORY_LIMA: ./inventories/lima/hosts.yml
   INVENTORY_PROD: ./inventories/production/hosts.yml
 
 includes:
   ansible: ./.taskfiles/ansible.yml
-  test: ./.taskfiles/test.yml
-  test:infra: ./.taskfiles/test-infra.yml
 
 tasks:
   default:
