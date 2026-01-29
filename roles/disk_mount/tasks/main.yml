@@ -1,0 +1,105 @@
+---
+# Disk mount role - idempotent disk formatting and mounting
+
+- name: Install filesystem tools
+  ansible.builtin.apt:
+    name:
+      - xfsprogs
+      - parted
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Auto-detect disk device if not specified
+  when: disk_mount_device == ""
+  block:
+    - name: Get list of block devices
+      ansible.builtin.command:
+        cmd: lsblk -dnpo NAME,TYPE,FSTYPE,SIZE --bytes
+      register: lsblk_output
+      changed_when: false
+
+    - name: Find largest unformatted disk
+      ansible.builtin.set_fact:
+        disk_mount_device: >-
+          {{ lsblk_output.stdout_lines
+             | map('split')
+             | selectattr('1', 'equalto', 'disk')
+             | selectattr('2', 'equalto', '')
+             | sort(attribute='3', reverse=true)
+             | map(attribute='0')
+             | first
+             | default('') }}
+
+    - name: Fail if no unformatted disk found
+      ansible.builtin.fail:
+        msg: "No unformatted disk found for auto-detection"
+      when: disk_mount_device == ""
+
+- name: Display target disk
+  ansible.builtin.debug:
+    msg: "Target disk: {{ disk_mount_device }}"
+
+- name: Check if disk has filesystem
+  ansible.builtin.command:
+    cmd: "blkid -o value -s TYPE {{ disk_mount_device }}"
+  register: disk_fstype
+  changed_when: false
+  failed_when: false
+
+- name: Check if disk is mounted
+  ansible.builtin.command:
+    cmd: "findmnt -n -o TARGET {{ disk_mount_device }}"
+  register: disk_mountpoint
+  changed_when: false
+  failed_when: false
+
+- name: Format disk if unformatted
+  when: >
+    disk_fstype.stdout == "" or
+    (disk_mount_force_format and disk_mountpoint.stdout == "")
+  block:
+    - name: Create filesystem on disk
+      community.general.filesystem:
+        dev: "{{ disk_mount_device }}"
+        fstype: "{{ disk_mount_fstype }}"
+        force: "{{ disk_mount_force_format }}"
+
+- name: Create mount point directory
+  ansible.builtin.file:
+    path: "{{ disk_mount_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Check current fstab entry
+  ansible.builtin.command:
+    cmd: "grep -c '{{ disk_mount_device }}' /etc/fstab"
+  register: fstab_check
+  changed_when: false
+  failed_when: false
+
+- name: Add fstab entry if missing
+  ansible.posix.mount:
+    path: "{{ disk_mount_path }}"
+    src: "{{ disk_mount_device }}"
+    fstype: "{{ disk_mount_fstype }}"
+    opts: "{{ disk_mount_opts }}"
+    state: mounted
+  when: fstab_check.stdout == "0" or disk_mountpoint.stdout != disk_mount_path
+
+- name: Ensure disk is mounted
+  ansible.posix.mount:
+    path: "{{ disk_mount_path }}"
+    src: "{{ disk_mount_device }}"
+    fstype: "{{ disk_mount_fstype }}"
+    opts: "{{ disk_mount_opts }}"
+    state: mounted
+
+- name: Set mount point ownership
+  ansible.builtin.file:
+    path: "{{ disk_mount_path }}"
+    owner: "{{ disk_mount_owner }}"
+    group: "{{ disk_mount_group }}"
+    mode: "{{ disk_mount_mode }}"
+    state: directory
+  when: disk_mount_owner != ""

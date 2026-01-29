@@ -1,0 +1,18 @@
+---
+# Disk mount role defaults
+
+# Target disk device (empty = auto-detect largest unformatted disk)
+disk_mount_device: ""
+
+# Mount configuration
+disk_mount_path: "/data/kafka"
+disk_mount_fstype: "xfs"
+disk_mount_opts: "noatime,nodiratime"
+
+# Ownership (created after kafka user exists)
+disk_mount_owner: "kafka"
+disk_mount_group: "kafka"
+disk_mount_mode: "0750"
+
+# Safety: set to true to format even if filesystem exists
+disk_mount_force_format: false

@@ -1,0 +1,3 @@
+---
+# Handlers for disk_mount role
+# Currently no handlers needed - all operations are immediate
