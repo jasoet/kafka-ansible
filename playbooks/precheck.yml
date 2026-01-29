@@ -141,3 +141,25 @@
       ansible.builtin.debug:
         msg: "Firewall: UFW not installed - OK"
       when: ufw_installed.rc != 0
+
+    #######################################
+    # APT Package Availability
+    #######################################
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Check if OpenJDK 21 is available
+      ansible.builtin.command:
+        cmd: apt-cache policy openjdk-21-jdk-headless
+      register: java_package_check
+      changed_when: false
+
+    - name: Assert OpenJDK 21 package is available
+      ansible.builtin.assert:
+        that:
+          - "'Candidate:' in java_package_check.stdout"
+          - "'(none)' not in java_package_check.stdout"
+        fail_msg: "Package openjdk-21-jdk-headless is not available in APT repositories"
+        success_msg: "APT Package: openjdk-21-jdk-headless - Available"
