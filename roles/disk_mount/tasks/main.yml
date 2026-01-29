@@ -95,6 +95,14 @@
     opts: "{{ disk_mount_opts }}"
     state: mounted
 
+- name: Check if owner user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ disk_mount_owner }}"
+  register: owner_check
+  failed_when: false
+  when: disk_mount_owner != ""
+
 - name: Set mount point ownership
   ansible.builtin.file:
     path: "{{ disk_mount_path }}"
@@ -102,4 +110,4 @@
     group: "{{ disk_mount_group }}"
     mode: "{{ disk_mount_mode }}"
     state: directory
-  when: disk_mount_owner != ""
+  when: disk_mount_owner != "" and owner_check.ansible_facts is defined
