@@ -10,4 +10,5 @@ galaxy_info:
         - noble
 
 dependencies:
+  - role: disk_mount
   - role: java
