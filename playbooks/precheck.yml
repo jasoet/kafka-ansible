@@ -279,3 +279,96 @@
       ansible.builtin.file:
         path: "{{ temp_dir.path }}"
         state: absent
+
+    #######################################
+    # Node Check Summary
+    #######################################
+    - name: Node pre-flight check summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Pre-flight Check Complete: {{ inventory_hostname }}"
+          - "========================================"
+          - "OS:           {{ ansible_distribution }} {{ ansible_distribution_version }} - OK"
+          - "Architecture: {{ ansible_architecture }} - OK"
+          - "CPU:          {{ ansible_processor_vcpus }} vCPUs - OK"
+          - "Memory:       {{ (ansible_memtotal_mb / 1024) | round(1) }}GB - OK"
+          - "Disk:         {{ max_disk_avail.stdout }}GB available - OK"
+          - "Firewall:     Checked - OK"
+          - "APT Package:  openjdk-21-jdk-headless - Available"
+          - "Downloads:    All URLs reachable - OK"
+          - "========================================"
+
+#######################################
+# Play 2: Cluster Connectivity Checks
+#######################################
+- name: Pre-flight Cluster Connectivity
+  hosts: kafka[0]
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Get list of all Kafka hosts
+      ansible.builtin.set_fact:
+        kafka_hosts: "{{ groups['kafka'] }}"
+
+    - name: Get other Kafka hosts (excluding self)
+      ansible.builtin.set_fact:
+        other_kafka_hosts: "{{ groups['kafka'] | difference([inventory_hostname]) }}"
+
+    - name: Debug - Testing connectivity to other nodes
+      ansible.builtin.debug:
+        msg: "Testing connectivity from {{ inventory_hostname }} to: {{ other_kafka_hosts | join(', ') }}"
+
+    - name: Test ping connectivity to other Kafka nodes
+      ansible.builtin.command:
+        cmd: "ping -c 2 -W 5 {{ item }}"
+      loop: "{{ other_kafka_hosts }}"
+      register: ping_results
+      failed_when: false
+      changed_when: false
+
+    - name: Assert ping connectivity to all nodes
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+        fail_msg: "Cannot ping {{ item.item }} from {{ inventory_hostname }}"
+        success_msg: "Ping: {{ item.item }} - Reachable"
+      loop: "{{ ping_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Test SSH connectivity to other Kafka nodes
+      ansible.builtin.command:
+        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no {{ item }} echo 'SSH OK'"
+      loop: "{{ other_kafka_hosts }}"
+      register: ssh_results
+      failed_when: false
+      changed_when: false
+      become: false
+
+    - name: Assert SSH connectivity to all nodes
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+        fail_msg: "Cannot SSH to {{ item.item }} from {{ inventory_hostname }}"
+        success_msg: "SSH: {{ item.item }} - Reachable"
+      loop: "{{ ssh_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Cluster connectivity summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Cluster Connectivity Check Complete"
+          - "========================================"
+          - "All {{ kafka_hosts | length }} nodes can communicate"
+          - "Ping: All nodes reachable"
+          - "SSH: All nodes reachable"
+          - "========================================"
+          - ""
+          - "========================================"
+          - "PRE-FLIGHT CHECK PASSED"
+          - "Ready for Kafka deployment!"
+          - "========================================"
