@@ -1,8 +1,8 @@
 version: '3'
 
 vars:
-  TERRAFORM_DIR: ./tests/terraform
-  INVENTORY_TEST: ./inventories/test/hosts.yml
+  LIMA_DIR: ./tests/lima
+  INVENTORY_LIMA: ./inventories/lima/hosts.yml
   INVENTORY_PROD: ./inventories/production/hosts.yml
 
 includes:
