@@ -1,0 +1,53 @@
+version: '3'
+
+vars:
+  VAGRANT_DIR: ./tests/vagrant
+  INVENTORY: ./inventories/vagrant/hosts.yml
+
+tasks:
+  up:
+    desc: Create test VMs
+    dir: "{{.VAGRANT_DIR}}"
+    cmds:
+      - vagrant up
+
+  down:
+    desc: Destroy test VMs
+    dir: "{{.VAGRANT_DIR}}"
+    cmds:
+      - vagrant destroy -f
+
+  halt:
+    desc: Stop test VMs (preserves state)
+    dir: "{{.VAGRANT_DIR}}"
+    cmds:
+      - vagrant halt
+
+  ssh:
+    desc: "SSH into a test VM (usage: task test:ssh -- 1)"
+    dir: "{{.VAGRANT_DIR}}"
+    cmds:
+      - vagrant ssh kafka-{{.CLI_ARGS | default "1"}}
+
+  status:
+    desc: Show test VM status
+    dir: "{{.VAGRANT_DIR}}"
+    cmds:
+      - vagrant status
+
+  deploy:
+    desc: Deploy Kafka to test VMs
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml
+
+  verify:
+    desc: Verify test cluster
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
+
+  full:
+    desc: Full test cycle (up → deploy → verify)
+    cmds:
+      - task: up
+      - task: deploy
+      - task: verify
