@@ -16,32 +16,24 @@
     path: "{{ kafka_versioned_dir }}/bin/kafka-server-start.sh"
   register: kafka_installed
 
-- name: Download Kafka tarball (IPv4 preferred)
+# Download directly on each node with fallback mirrors
+- name: Download Kafka tarball (with fallback mirrors)
   ansible.builtin.shell: |
-    curl -4 -fsSL --retry 3 --retry-delay 5 -o "{{ kafka_download_dest }}" "{{ kafka_download_url }}"
+    {% for mirror in kafka_download_mirrors %}
+    echo "Trying mirror: {{ mirror }}"
+    if curl --connect-timeout 10 --max-time {{ kafka_download_timeout }} -o "{{ kafka_download_dest }}" "{{ mirror }}"; then
+      echo "Success: {{ mirror }}"
+      exit 0
+    fi
+    echo "Failed: {{ mirror }}"
+    rm -f "{{ kafka_download_dest }}"
+    {% endfor %}
+    echo "All mirrors failed"
+    exit 1
   args:
     creates: "{{ kafka_download_dest }}"
   register: kafka_download_result
-  retries: 3
-  delay: 10
-  until: kafka_download_result is succeeded
-  when:
-    - not kafka_installed.stat.exists
-    - kafka_download_prefer_ipv4 | default(true)
-
-- name: Download Kafka tarball (standard)
-  ansible.builtin.get_url:
-    url: "{{ kafka_download_url }}"
-    dest: "{{ kafka_download_dest }}"
-    mode: "0644"
-    timeout: 300
-  register: kafka_download_result
-  retries: 5
-  delay: 10
-  until: kafka_download_result is succeeded
-  when:
-    - not kafka_installed.stat.exists
-    - not (kafka_download_prefer_ipv4 | default(true))
+  when: not kafka_installed.stat.exists
 
 - name: Set permissions on downloaded tarball
   ansible.builtin.file:
