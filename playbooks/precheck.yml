@@ -226,24 +226,39 @@
     #######################################
     # APT Package Availability
     #######################################
-    - name: Update apt cache
+    - name: Update apt cache (with timeout)
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
-      retries: 3
-      delay: 10
+      async: 60
+      poll: 5
       register: apt_update
-      until: apt_update is success
+      failed_when: false
+
+    - name: Check apt cache update result
+      ansible.builtin.set_fact:
+        apt_cache_status: "{{ 'PASS' if apt_update.finished | default(false) and apt_update.failed | default(true) == false else 'TIMEOUT' if not apt_update.finished | default(true) else 'FAIL' }}"
+
+    - name: Record apt cache update result
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'apt_cache_update': {
+              'status': apt_cache_status,
+              'details': 'Cache updated' if apt_cache_status == 'PASS' else 'Timed out after 60s' if apt_cache_status == 'TIMEOUT' else 'Failed'
+            }
+          }) }}
 
     - name: Check if OpenJDK 21 is available
       ansible.builtin.command:
         cmd: apt-cache policy openjdk-21-jdk-headless
       register: java_package_check
       changed_when: false
+      failed_when: false
 
     - name: Evaluate OpenJDK availability
       ansible.builtin.set_fact:
-        java_available: "{{ 'Candidate:' in java_package_check.stdout and 'Candidate: (none)' not in java_package_check.stdout }}"
+        java_available: "{{ 'Candidate:' in java_package_check.stdout | default('') and 'Candidate: (none)' not in java_package_check.stdout | default('') }}"
 
     - name: Record APT package check
       ansible.builtin.set_fact:
@@ -252,7 +267,7 @@
             'apt_openjdk21': {
               'status': 'PASS' if java_available else 'FAIL',
               'available': java_available,
-              'details': java_package_check.stdout
+              'details': java_package_check.stdout | default('Unable to check')
             }
           }) }}
 
@@ -289,8 +304,12 @@
         url: "{{ kafka_download_url }}"
         method: HEAD
         timeout: 30
+        validate_certs: true
       register: kafka_url_check
       failed_when: false
+      retries: 2
+      delay: 3
+      until: kafka_url_check.status == 200
 
     - name: Record Kafka URL check
       ansible.builtin.set_fact:
@@ -343,31 +362,42 @@
           }) }}
 
     #######################################
-    # Kafka Binary Download Test
+    # Kafka Binary Download Test (with timeout)
     #######################################
     - name: Create temp directory for Kafka download test
       ansible.builtin.tempfile:
         state: directory
         prefix: kafka_precheck_
       register: temp_dir
-      when: kafka_url_check.status == 200
+      when: kafka_url_check.status | default(0) == 200
+      failed_when: false
 
-    - name: Download Kafka binary for verification
+    - name: Download Kafka binary for verification (async with 90s timeout)
       ansible.builtin.get_url:
         url: "{{ kafka_download_url }}"
         dest: "{{ temp_dir.path }}/kafka.tgz"
-        timeout: 120
+        timeout: 60
         mode: "0644"
-      register: kafka_download
-      when: kafka_url_check.status == 200
+      register: kafka_download_async
+      when: kafka_url_check.status | default(0) == 200 and temp_dir.path is defined
       failed_when: false
+      async: 90
+      poll: 10
+
+    - name: Check Kafka download result
+      ansible.builtin.set_fact:
+        kafka_download_status: >-
+          {{ 'PASS' if kafka_download_async.finished | default(false) and not kafka_download_async.failed | default(true)
+             else 'TIMEOUT' if kafka_download_async is defined and not kafka_download_async.finished | default(true)
+             else 'SKIP' if kafka_url_check.status | default(0) != 200
+             else 'FAIL' }}
 
     - name: Extract Kafka binary
       ansible.builtin.unarchive:
         src: "{{ temp_dir.path }}/kafka.tgz"
         dest: "{{ temp_dir.path }}"
         remote_src: true
-      when: kafka_url_check.status == 200 and kafka_download is not failed
+      when: kafka_download_status == 'PASS' and temp_dir.path is defined
       failed_when: false
       register: kafka_extract
 
@@ -377,17 +407,19 @@
         patterns: "kafka-server-start.sh"
         recurse: true
       register: kafka_script
-      when: kafka_url_check.status == 200 and kafka_extract is not failed
+      when: kafka_download_status == 'PASS' and kafka_extract is defined and kafka_extract is not failed
+      failed_when: false
 
     - name: Record Kafka binary check
       ansible.builtin.set_fact:
         check_results: >-
           {{ check_results | combine({
             'kafka_binary': {
-              'status': 'PASS' if (kafka_script.files | default([]) | length > 0) else 'FAIL',
-              'downloaded': kafka_download is not failed,
-              'extracted': kafka_extract is not failed,
-              'scripts_found': kafka_script.files | default([]) | length
+              'status': 'PASS' if (kafka_script.files | default([]) | length > 0) else kafka_download_status if kafka_download_status in ['TIMEOUT', 'SKIP'] else 'FAIL',
+              'downloaded': kafka_download_status,
+              'extracted': (kafka_extract is not failed) if kafka_download_status == 'PASS' and kafka_extract is defined else 'N/A',
+              'scripts_found': kafka_script.files | default([]) | length,
+              'details': 'Download timed out after 90s' if kafka_download_status == 'TIMEOUT' else 'URL check failed' if kafka_download_status == 'SKIP' else ''
             }
           }) }}
 
@@ -404,10 +436,12 @@
       ansible.builtin.set_fact:
         checks_failed: "{{ check_results.values() | selectattr('status', 'eq', 'FAIL') | list | length > 0 }}"
 
-    - name: Count passed and failed checks
+    - name: Count passed, failed, and timeout checks
       ansible.builtin.set_fact:
         passed_count: "{{ check_results.values() | selectattr('status', 'eq', 'PASS') | list | length }}"
         failed_count: "{{ check_results.values() | selectattr('status', 'eq', 'FAIL') | list | length }}"
+        timeout_count: "{{ check_results.values() | selectattr('status', 'eq', 'TIMEOUT') | list | length }}"
+        skip_count: "{{ check_results.values() | selectattr('status', 'eq', 'SKIP') | list | length }}"
 
     #######################################
     # Generate Report
@@ -424,7 +458,7 @@
           ================================================================================
           Host:         {{ inventory_hostname }}
           Generated:    {{ report_timestamp }}
-          Overall:      {{ 'PASSED' if not checks_failed else 'FAILED' }} ({{ passed_count }} passed, {{ failed_count }} failed)
+          Overall:      {{ 'PASSED' if not checks_failed else 'FAILED' }} ({{ passed_count }} passed, {{ failed_count }} failed, {{ timeout_count }} timeout, {{ skip_count }} skipped)
           ================================================================================
 
           CHECK RESULTS
@@ -501,7 +535,7 @@
 - name: Pre-flight Cluster Connectivity
   hosts: kafka[0]
   become: true
-  gather_facts: false
+  gather_facts: true
 
   tasks:
     - name: Get list of all Kafka hosts
@@ -512,40 +546,86 @@
       ansible.builtin.set_fact:
         other_kafka_hosts: "{{ groups['kafka'] | difference([inventory_hostname]) }}"
 
+    - name: Build list of other nodes with private IPs
+      ansible.builtin.set_fact:
+        other_nodes_info: >-
+          {{ other_nodes_info | default([]) + [{
+            'hostname': item,
+            'private_ip': hostvars[item]['kafka_internal_ip'] | default(hostvars[item]['ansible_default_ipv4']['address'] | default('N/A'))
+          }] }}
+      loop: "{{ other_kafka_hosts }}"
+
     - name: Debug - Testing connectivity to other nodes
       ansible.builtin.debug:
-        msg: "Testing connectivity from {{ inventory_hostname }} to: {{ other_kafka_hosts | join(', ') }}"
+        msg: "Testing connectivity from {{ inventory_hostname }} ({{ hostvars[inventory_hostname]['kafka_internal_ip'] | default(ansible_default_ipv4.address) }}) to other nodes"
 
-    - name: Test ping connectivity to other Kafka nodes
+    - name: Display target nodes
+      ansible.builtin.debug:
+        msg: "  - {{ item.hostname }} ({{ item.private_ip }})"
+      loop: "{{ other_nodes_info }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    #######################################
+    # Test connectivity via Private IP
+    #######################################
+    - name: Test ping connectivity to other Kafka nodes (private IP)
       ansible.builtin.command:
-        cmd: "ping -c 2 -W 5 {{ item }}"
-      loop: "{{ other_kafka_hosts }}"
-      register: ping_results
+        cmd: "ping -c 2 -W 5 {{ item.private_ip }}"
+      loop: "{{ other_nodes_info }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: ping_ip_results
       failed_when: false
       changed_when: false
 
-    - name: Display ping results
+    - name: Display ping results (private IP)
       ansible.builtin.debug:
-        msg: "Ping {{ item.item }}: {{ 'OK' if item.rc == 0 else 'FAILED' }}"
-      loop: "{{ ping_results.results }}"
+        msg: "Ping {{ item.item.hostname }} ({{ item.item.private_ip }}): {{ 'OK' if item.rc == 0 else 'FAILED' }}"
+      loop: "{{ ping_ip_results.results }}"
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item.item.hostname }}"
 
-    - name: Test SSH connectivity to other Kafka nodes
-      ansible.builtin.command:
-        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no {{ item }} echo 'SSH OK'"
-      loop: "{{ other_kafka_hosts }}"
-      register: ssh_results
+    #######################################
+    # Test Kafka ports via Private IP
+    #######################################
+    - name: Test Kafka broker port connectivity (9092)
+      ansible.builtin.wait_for:
+        host: "{{ item.private_ip }}"
+        port: 9092
+        timeout: 5
+        state: started
+      loop: "{{ other_nodes_info }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: broker_port_results
       failed_when: false
-      changed_when: false
-      become: false
 
-    - name: Display SSH results
+    - name: Display broker port results
       ansible.builtin.debug:
-        msg: "SSH {{ item.item }}: {{ 'OK' if item.rc == 0 else 'FAILED' }}"
-      loop: "{{ ssh_results.results }}"
+        msg: "Port 9092 {{ item.item.hostname }} ({{ item.item.private_ip }}): {{ 'OK' if item.state | default('') == 'started' else 'NOT LISTENING (expected before deployment)' }}"
+      loop: "{{ broker_port_results.results }}"
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item.item.hostname }}"
+
+    - name: Test Kafka controller port connectivity (9093)
+      ansible.builtin.wait_for:
+        host: "{{ item.private_ip }}"
+        port: 9093
+        timeout: 5
+        state: started
+      loop: "{{ other_nodes_info }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: controller_port_results
+      failed_when: false
+
+    - name: Display controller port results
+      ansible.builtin.debug:
+        msg: "Port 9093 {{ item.item.hostname }} ({{ item.item.private_ip }}): {{ 'OK' if item.state | default('') == 'started' else 'NOT LISTENING (expected before deployment)' }}"
+      loop: "{{ controller_port_results.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
 
     - name: Cluster connectivity summary
       ansible.builtin.debug:
