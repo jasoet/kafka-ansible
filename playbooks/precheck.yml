@@ -67,6 +67,22 @@
           }) }}
 
     #######################################
+    # Network Information
+    #######################################
+    - name: Record network information
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'network': {
+              'status': 'PASS',
+              'private_ip': ansible_facts['default_ipv4']['address'] | default('N/A'),
+              'interface': ansible_facts['default_ipv4']['interface'] | default('N/A'),
+              'gateway': ansible_facts['default_ipv4']['gateway'] | default('N/A'),
+              'hostname': ansible_facts['hostname']
+            }
+          }) }}
+
+    #######################################
     # Resource Validation
     #######################################
     - name: Check CPU cores
@@ -428,6 +444,13 @@
           Kernel:       {{ ansible_facts['kernel'] }}
           CPU Cores:    {{ ansible_facts['processor_vcpus'] }}
           Memory:       {{ (ansible_facts['memtotal_mb'] / 1024) | round(1) }}GB
+
+          NETWORK INFORMATION
+          --------------------------------------------------------------------------------
+          Private IP:   {{ ansible_facts['default_ipv4']['address'] | default('N/A') }}
+          Interface:    {{ ansible_facts['default_ipv4']['interface'] | default('N/A') }}
+          Gateway:      {{ ansible_facts['default_ipv4']['gateway'] | default('N/A') }}
+          Hostname:     {{ ansible_facts['hostname'] }}
 
           DISK LAYOUT (/etc/fstab)
           --------------------------------------------------------------------------------
