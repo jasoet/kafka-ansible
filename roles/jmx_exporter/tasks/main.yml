@@ -14,6 +14,11 @@
     owner: "{{ kafka_user | default('kafka') }}"
     group: "{{ kafka_group | default('kafka') }}"
     mode: "0644"
+    timeout: 120
+  register: jmx_download_result
+  retries: 3
+  delay: 5
+  until: jmx_download_result is succeeded
 
 - name: Deploy JMX exporter configuration
   ansible.builtin.template:
