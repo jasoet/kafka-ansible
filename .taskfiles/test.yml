@@ -8,12 +8,16 @@ tasks:
   up:
     desc: Create test VMs
     dir: "{{.VAGRANT_DIR}}"
+    env:
+      VAGRANT_EXPERIMENTAL: disks
     cmds:
       - vagrant up
 
   down:
     desc: Destroy test VMs
     dir: "{{.VAGRANT_DIR}}"
+    env:
+      VAGRANT_EXPERIMENTAL: disks
     cmds:
       - vagrant destroy -f
 
