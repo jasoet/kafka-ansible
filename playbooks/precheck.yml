@@ -280,6 +280,7 @@
         kafka_scala_version: "2.13"
         jmx_exporter_version: "1.0.1"
         kafka_exporter_version: "1.8.0"
+        node_exporter_version: "1.9.0"
 
     - name: Set Kafka download URL
       ansible.builtin.set_fact:
@@ -298,6 +299,12 @@
         kafka_exporter_url: >-
           https://github.com/danielqsj/kafka_exporter/releases/download/v{{
           kafka_exporter_version }}/kafka_exporter-{{ kafka_exporter_version }}.linux-arm64.tar.gz
+
+    - name: Set Node Exporter download URL
+      ansible.builtin.set_fact:
+        node_exporter_url: >-
+          https://github.com/prometheus/node_exporter/releases/download/v{{
+          node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-arm64.tar.gz
 
     - name: Check Kafka download URL is reachable
       ansible.builtin.uri:
@@ -358,6 +365,26 @@
               'status': 'PASS' if kafka_exp_url_check.status == 200 else 'FAIL',
               'url': kafka_exporter_url,
               'http_status': kafka_exp_url_check.status | default('N/A')
+            }
+          }) }}
+
+    - name: Check Node Exporter download URL is reachable
+      ansible.builtin.uri:
+        url: "{{ node_exporter_url }}"
+        method: HEAD
+        timeout: 30
+        follow_redirects: all
+      register: node_exp_url_check
+      failed_when: false
+
+    - name: Record Node Exporter URL check
+      ansible.builtin.set_fact:
+        check_results: >-
+          {{ check_results | combine({
+            'download_node_exporter': {
+              'status': 'PASS' if node_exp_url_check.status == 200 else 'FAIL',
+              'url': node_exporter_url,
+              'http_status': node_exp_url_check.status | default('N/A')
             }
           }) }}
 

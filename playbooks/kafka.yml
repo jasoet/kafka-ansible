@@ -27,6 +27,9 @@
     - role: kafka_exporter
       tags: [kafka_exporter, monitoring]
 
+    - role: node_exporter
+      tags: [node_exporter, monitoring]
+
   post_tasks:
     - name: Display Kafka cluster status
       ansible.builtin.debug:
@@ -35,3 +38,4 @@
           - "Broker: {{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:{{ kafka_port }}"
           - "JMX metrics: http://{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:{{ jmx_exporter_port }}/metrics"
           - "Kafka metrics: http://{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:{{ kafka_exporter_port }}/metrics"
+          - "Node metrics: http://{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:{{ node_exporter_port }}/metrics"

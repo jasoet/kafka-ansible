@@ -20,6 +20,7 @@
     kafka_controller_port: 9093
     jmx_exporter_port: 7071
     kafka_exporter_port: 9308
+    node_exporter_port: 9100
 
   tasks:
     #######################################
@@ -261,6 +262,45 @@
         success_msg: "Kafka exporter is responding with metrics on port {{ kafka_exporter_port }}"
 
     #######################################
+    # Node Exporter Verification
+    #######################################
+    - name: Check Node exporter service status
+      ansible.builtin.systemd:
+        name: node_exporter
+      register: node_exporter_service
+
+    - name: Assert Node exporter service is running
+      ansible.builtin.assert:
+        that:
+          - node_exporter_service.status.ActiveState == "active"
+        fail_msg: "Node exporter service is not running"
+        success_msg: "Node exporter service is running"
+
+    - name: Wait for Node exporter port
+      ansible.builtin.wait_for:
+        port: "{{ node_exporter_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Check Node exporter metrics endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:{{ node_exporter_port }}/metrics"
+        return_content: true
+        timeout: 30
+      register: node_exp_metrics
+      retries: 3
+      delay: 5
+
+    - name: Assert Node exporter is returning metrics
+      ansible.builtin.assert:
+        that:
+          - node_exp_metrics.status == 200
+          - "'node_' in node_exp_metrics.content"
+        fail_msg: "Node exporter is not returning expected metrics"
+        success_msg: "Node exporter is responding with metrics on port {{ node_exporter_port }}"
+
+    #######################################
     # Node Verification Summary
     #######################################
     - name: Node verification summary
@@ -278,6 +318,7 @@
           - "Controller Port: {{ kafka_controller_port }} - OK"
           - "JMX Exporter: Port {{ jmx_exporter_port }} - OK"
           - "Kafka Exporter: Port {{ kafka_exporter_port }} - OK"
+          - "Node Exporter: Port {{ node_exporter_port }} - OK"
           - "========================================"
 
 #######################################
