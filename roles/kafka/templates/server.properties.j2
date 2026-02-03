@@ -16,8 +16,8 @@ listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
 ############################# Log Basics #############################
 log.dirs={{ kafka_data_dir }}
 num.partitions={{ kafka_num_partitions }}
-default.replication.factor=3
-min.insync.replicas=2
+default.replication.factor={{ kafka_default_replication_factor }}
+min.insync.replicas={{ kafka_min_insync_replicas }}
 
 ############################# Log Retention Policy #############################
 log.retention.hours={{ kafka_log_retention_hours }}
@@ -37,9 +37,9 @@ fetch.min.bytes={{ kafka_fetch_min_bytes }}
 fetch.max.wait.ms={{ kafka_fetch_max_wait_ms }}
 
 ############################# Internal Topic Settings #############################
-offsets.topic.replication.factor=3
-transaction.state.log.replication.factor=3
-transaction.state.log.min.isr=2
+offsets.topic.replication.factor={{ kafka_offsets_topic_replication_factor }}
+transaction.state.log.replication.factor={{ kafka_transaction_state_log_replication_factor }}
+transaction.state.log.min.isr={{ kafka_min_insync_replicas }}
 
 ############################# Group Coordinator Settings #############################
 group.initial.rebalance.delay.ms=3000

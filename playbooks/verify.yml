@@ -333,6 +333,8 @@
     kafka_install_dir: "/opt/kafka"
     kafka_port: 9092
     test_topic: "verification-test-{{ ansible_facts['date_time']['epoch'] | default('unknown') }}"
+    cluster_size: "{{ groups['kafka'] | length }}"
+    test_replication_factor: "{{ [cluster_size | int, 3] | min }}"
 
   tasks:
     - name: Gather date/time facts
@@ -381,8 +383,8 @@
           --bootstrap-server localhost:{{ kafka_port }}
           --create
           --topic {{ test_topic }}
-          --partitions 3
-          --replication-factor 3
+          --partitions {{ [cluster_size | int, 3] | min }}
+          --replication-factor {{ test_replication_factor }}
       register: create_topic
       changed_when: true
 

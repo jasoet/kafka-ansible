@@ -32,6 +32,12 @@ kafka_controller_port: 9093
 kafka_log_retention_hours: 72
 kafka_log_retention_bytes: 53687091200
 
+# Replication settings (override in inventory group_vars per environment)
+kafka_default_replication_factor: 3
+kafka_min_insync_replicas: 2
+kafka_offsets_topic_replication_factor: 3
+kafka_transaction_state_log_replication_factor: 3
+
 # Performance - resource aware defaults
 kafka_heap_size: "{{ [[(ansible_facts['memtotal_mb'] | default(4096)) * 0.25 | int, 1024] | max, 8192] | min }}m"
 kafka_num_network_threads: "{{ [[(ansible_facts['processor_vcpus'] | default(2)) // 2, 1] | max, 3] | max | int }}"

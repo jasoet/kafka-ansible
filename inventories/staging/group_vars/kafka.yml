@@ -1,0 +1,24 @@
+---
+# Override defaults for staging environment (single-node)
+
+# SSH settings
+ansible_user: ubuntu
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
+# Precheck requirements (relaxed for staging)
+precheck_min_vcpus: 2
+precheck_min_memory_mb: 4096
+precheck_min_disk_gb: 50
+
+# Retention settings
+kafka_log_retention_hours: 24
+kafka_log_retention_bytes: 10737418240  # 10GB
+
+# Data directory
+kafka_data_dir: "/data/kafka"
+
+# Replication settings for single-node cluster
+kafka_default_replication_factor: 1
+kafka_min_insync_replicas: 1
+kafka_offsets_topic_replication_factor: 1
+kafka_transaction_state_log_replication_factor: 1

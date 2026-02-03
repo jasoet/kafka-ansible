@@ -18,3 +18,5 @@ kafka_data_dir: "/data/kafka"
 # Replication settings for 3-node cluster
 kafka_default_replication_factor: 3
 kafka_min_insync_replicas: 2
+kafka_offsets_topic_replication_factor: 3
+kafka_transaction_state_log_replication_factor: 3

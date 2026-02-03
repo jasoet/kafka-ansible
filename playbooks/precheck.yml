@@ -14,12 +14,12 @@
   gather_facts: true
 
   vars:
-    required_os: "Ubuntu"
-    required_os_version: "24.04"
-    required_arch: "aarch64"
-    min_vcpus: 8
-    min_memory_mb: 15360
-    min_disk_gb: 2000
+    required_os: "{{ precheck_required_os | default('Ubuntu') }}"
+    required_os_version: "{{ precheck_required_os_version | default('24.04') }}"
+    required_arch: "{{ precheck_required_arch | default('aarch64') }}"
+    min_vcpus: "{{ precheck_min_vcpus | default(8) }}"
+    min_memory_mb: "{{ precheck_min_memory_mb | default(15360) }}"
+    min_disk_gb: "{{ precheck_min_disk_gb | default(2000) }}"
     kafka_ports:
       - 9092
       - 9093
@@ -573,6 +573,11 @@
       ansible.builtin.set_fact:
         other_kafka_hosts: "{{ groups['kafka'] | difference([inventory_hostname]) }}"
 
+    - name: Skip connectivity checks for single-node cluster
+      ansible.builtin.debug:
+        msg: "Single-node cluster detected - skipping inter-node connectivity checks"
+      when: other_kafka_hosts | length == 0
+
     - name: Build list of other nodes with private IPs
       ansible.builtin.set_fact:
         other_nodes_info: >-
@@ -581,10 +586,12 @@
             'private_ip': hostvars[item]['kafka_internal_ip'] | default(hostvars[item]['ansible_default_ipv4']['address'] | default('N/A'))
           }] }}
       loop: "{{ other_kafka_hosts }}"
+      when: other_kafka_hosts | length > 0
 
     - name: Debug - Testing connectivity to other nodes
       ansible.builtin.debug:
         msg: "Testing connectivity from {{ inventory_hostname }} ({{ hostvars[inventory_hostname]['kafka_internal_ip'] | default(ansible_default_ipv4.address) }}) to other nodes"
+      when: other_kafka_hosts | length > 0
 
     - name: Display target nodes
       ansible.builtin.debug:
@@ -592,6 +599,7 @@
       loop: "{{ other_nodes_info }}"
       loop_control:
         label: "{{ item.hostname }}"
+      when: other_kafka_hosts | length > 0
 
     #######################################
     # Test connectivity via Private IP
@@ -605,6 +613,7 @@
       register: ping_ip_results
       failed_when: false
       changed_when: false
+      when: other_kafka_hosts | length > 0
 
     - name: Display ping results (private IP)
       ansible.builtin.debug:
@@ -612,6 +621,7 @@
       loop: "{{ ping_ip_results.results }}"
       loop_control:
         label: "{{ item.item.hostname }}"
+      when: other_kafka_hosts | length > 0
 
     #######################################
     # Test Kafka ports via Private IP
@@ -627,6 +637,7 @@
         label: "{{ item.hostname }}"
       register: broker_port_results
       failed_when: false
+      when: other_kafka_hosts | length > 0
 
     - name: Display broker port results
       ansible.builtin.debug:
@@ -634,6 +645,7 @@
       loop: "{{ broker_port_results.results }}"
       loop_control:
         label: "{{ item.item.hostname }}"
+      when: other_kafka_hosts | length > 0
 
     - name: Test Kafka controller port connectivity (9093)
       ansible.builtin.wait_for:
@@ -646,6 +658,7 @@
         label: "{{ item.hostname }}"
       register: controller_port_results
       failed_when: false
+      when: other_kafka_hosts | length > 0
 
     - name: Display controller port results
       ansible.builtin.debug:
@@ -653,6 +666,7 @@
       loop: "{{ controller_port_results.results }}"
       loop_control:
         label: "{{ item.item.hostname }}"
+      when: other_kafka_hosts | length > 0
 
     - name: Cluster connectivity summary
       ansible.builtin.debug:
