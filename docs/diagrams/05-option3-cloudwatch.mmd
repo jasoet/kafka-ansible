@@ -1,0 +1,38 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart TB
+    subgraph CW["AWS CloudWatch · ~$700-4,400/mo"]
+        CWD["CloudWatch Dashboards"]
+        CWM["CloudWatch Metrics<br>$0.30/custom metric"]
+        CWL["CloudWatch Logs"]
+        CWA["CloudWatch Alarms<br>SNS Notifications"]
+        CWD --> CWM & CWL
+        CWM --> CWA
+    end
+
+    subgraph KAFKA["Kafka Cluster · EC2"]
+        CW_AGENT["CloudWatch Agent<br>per broker"]
+        BROKERS["Broker 1 · Broker 2 · Broker 3"]
+        LIMITATION["LIMITATION:<br>Cannot scrape JMX, Kafka,<br>Node Exporters natively.<br>Workaround: $0.30/metric"]
+        CW_AGENT -.- BROKERS
+    end
+
+    subgraph EKS["EKS Cluster"]
+        CI["Container Insights<br>Automatic · Works Well"]
+        SERVICES["Backend · Packager<br>Kubernetes · Containers"]
+        CI -.- SERVICES
+    end
+
+    AWS_NATIVE["Other AWS: RDS, S3, ALB, Lambda"]
+
+    CW_AGENT -- "host metrics + logs" --> CWM & CWL
+    LIMITATION -. "$0.30/metric" .-> CWM
+    CI -- "observations" --> CWM
+    CI -- "container logs" --> CWL
+    AWS_NATIVE -- "native integration" --> CWM
+
+    style LIMITATION stroke:#cb2431,fill:#fff0f0

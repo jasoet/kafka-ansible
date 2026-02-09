@@ -1,0 +1,40 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart TB
+    subgraph TW["Truewatch Cloud · ~$100-250/mo"]
+        DASH["Truewatch Dashboards & Alerts"]
+        subgraph FEATURES["Included Features"]
+            direction LR
+            INFRA["Infrastructure"]
+            APM["APM"]
+            LOGS["Log Mgmt"]
+            RUM["RUM"]
+            SYNTH["Synthetic"]
+        end
+        TW_STORE["Metrics + Log Storage<br>Managed by Truewatch"]
+        DASH --> FEATURES --> TW_STORE
+    end
+
+    subgraph KAFKA["Kafka Cluster · EC2"]
+        TW_AGENT_K["Truewatch Agent / Alloy<br>per broker"]
+        BROKERS["Broker 1 · Broker 2 · Broker 3"]
+        TW_AGENT_K -.- BROKERS
+    end
+
+    subgraph EKS["EKS Cluster"]
+        TW_AGENT_E["Truewatch Agent<br>DaemonSet"]
+        SERVICES["Backend · Packager<br>Kubernetes · Containers"]
+        TW_AGENT_E -.- SERVICES
+    end
+
+    AWS_INT["AWS Integration<br>CloudWatch import"]
+
+    TW_AGENT_K -- "push metrics" --> TW_STORE
+    TW_AGENT_K -- "push logs" --> TW_STORE
+    TW_AGENT_E -- "push metrics" --> TW_STORE
+    TW_AGENT_E -- "push logs" --> TW_STORE
+    AWS_INT -. "API" .-> TW_STORE

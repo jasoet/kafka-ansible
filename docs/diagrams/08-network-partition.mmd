@@ -1,0 +1,40 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart TB
+    subgraph HEALTHY["Healthy Cluster"]
+        direction LR
+        B1_OK["Broker 1"] <--> B2_OK["Broker 2"]
+        B2_OK <--> B3_OK["Broker 3"]
+        B1_OK <--> B3_OK
+    end
+
+    subgraph PARTITIONED["After Network Partition"]
+        direction TB
+        subgraph CONNECTED["Connected Pair"]
+            direction LR
+            B1["Broker 1"] <-- "replication OK" --> B2["Broker 2"]
+        end
+        subgraph ISOLATED["Isolated"]
+            B3["Broker 3 · Thinks it's fine"]
+        end
+        B1 -. "BROKEN" .- B3
+        B2 -. "BROKEN" .- B3
+    end
+
+    subgraph IMPACT["Impact"]
+        direction TB
+        I1["Some backends still send data to Broker 3"]
+        I2["Data on Broker 3 is NOT replicated"]
+        I3["If Broker 3 fails next → data permanently lost"]
+    end
+
+    HEALTHY -- "network break" --> PARTITIONED
+    PARTITIONED --> IMPACT
+
+    style ISOLATED stroke:#cb2431,fill:#fff0f0
+    style IMPACT stroke:#cb2431,fill:#fff0f0
+    style CONNECTED stroke:#22863a,fill:#f0fff0

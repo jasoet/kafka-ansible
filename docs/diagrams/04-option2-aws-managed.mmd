@@ -1,0 +1,33 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart TB
+    subgraph AWS["AWS Managed Services · ~$290-490/mo"]
+        AMG["Amazon Managed Grafana"]
+        AMP["Amazon Managed Prometheus"]
+        CWL["CloudWatch Logs"]
+        AMG --> AMP & CWL
+    end
+
+    subgraph KAFKA["Kafka Cluster · EC2"]
+        ALLOY_K["Grafana Alloy<br>per broker"]
+        BROKERS["Broker 1 · Broker 2 · Broker 3"]
+        ALLOY_K -.- BROKERS
+    end
+
+    subgraph EKS["EKS Cluster"]
+        ALLOY_E["Grafana Alloy<br>DaemonSet"]
+        SERVICES["Backend · Packager<br>Kubernetes · Containers"]
+        ALLOY_E -.- SERVICES
+    end
+
+    FUTURE["Future: RDS, ElastiCache, etc."]
+
+    ALLOY_K -- "remote write" --> AMP
+    ALLOY_K -- "push logs" --> CWL
+    ALLOY_E -- "remote write" --> AMP
+    ALLOY_E -- "push logs" --> CWL
+    FUTURE -. "native integration" .-> AMG

@@ -1,0 +1,29 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart LR
+    subgraph INSTALLED["Installed & Running"]
+        JMX["JMX Exporter :7071"]
+        KE["Kafka Exporter :9308"]
+        NE["Node Exporter :9100"]
+    end
+
+    subgraph MISSING["Not Yet Configured"]
+        STORE["Metrics Storage"]
+        VIS["Dashboards"]
+        ALERT["Alerting"]
+        LOGS["Log Aggregation"]
+        STORE --> VIS
+        STORE --> ALERT
+        LOGS --> VIS
+    end
+
+    JMX -. "?" .-> STORE
+    KE -. "?" .-> STORE
+    NE -. "?" .-> STORE
+
+    style INSTALLED stroke:#22863a,fill:#f0fff0
+    style MISSING stroke:#cb2431,fill:#fff0f0,stroke-dasharray: 5 5

@@ -1,0 +1,44 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+  flowchart:
+    padding: 20
+---
+flowchart TB
+    SOURCES["Mobile Apps + Websites<br>Hundreds of Domains"]
+    AGENT["Analytics Agents<br>~10,000 events/sec"]
+
+    subgraph EKS_IN["Ingestion Layer · EKS"]
+        BE["Backend Instances<br>Scalable to tens of containers"]
+        BATCH["Batching & Forwarding"]
+    end
+
+    subgraph KAFKA["Kafka Cluster · EC2"]
+        direction LR
+        B1["Broker 1<br>:9092"]
+        B2["Broker 2<br>:9092"]
+        B3["Broker 3<br>:9092"]
+    end
+
+    subgraph EXPORTERS["Monitoring Agents · Already Installed"]
+        direction LR
+        JMX["JMX Exporter<br>:7071"]
+        KE["Kafka Exporter<br>:9308"]
+        NE["Node Exporter<br>:9100"]
+    end
+
+    subgraph EKS_OUT["Processing Layer · EKS"]
+        PACKAGER["Packager Service<br>Parquet per 100K records"]
+    end
+
+    S3["S3 · Parquet Files<br>Analytics & Reporting"]
+
+    SOURCES --> AGENT
+    AGENT --> BE --> BATCH
+    BATCH --> KAFKA
+    B1 <--> B2 <--> B3
+    KAFKA --> PACKAGER
+    KAFKA -.- EXPORTERS
+    PACKAGER --> S3

@@ -1,0 +1,35 @@
+---
+config:
+  theme: neutral
+  themeVariables:
+    background: "#ffffff"
+---
+flowchart TB
+    subgraph MON["Monitoring VM · EC2 · ~$150/mo"]
+        GRAFANA["Grafana :3000"]
+        PROM["Prometheus :9090"]
+        LOKI["Loki :3100"]
+        ALERT["Alertmanager :9093"]
+        GRAFANA --> PROM & LOKI
+        PROM --> ALERT
+    end
+
+    subgraph KAFKA["Kafka Cluster · EC2"]
+        ALLOY_K["Grafana Alloy<br>per broker"]
+        BROKERS["Broker 1 · Broker 2 · Broker 3"]
+        ALLOY_K -.- BROKERS
+    end
+
+    subgraph EKS["EKS Cluster"]
+        ALLOY_E["Grafana Alloy<br>DaemonSet"]
+        SERVICES["Backend · Packager<br>Kubernetes · Containers"]
+        ALLOY_E -.- SERVICES
+    end
+
+    FUTURE["Future: RDS, ElastiCache, etc."]
+
+    ALLOY_K -- "metrics" --> PROM
+    ALLOY_K -- "logs" --> LOKI
+    ALLOY_E -- "metrics" --> PROM
+    ALLOY_E -- "logs" --> LOKI
+    FUTURE -. "future" .-> PROM
