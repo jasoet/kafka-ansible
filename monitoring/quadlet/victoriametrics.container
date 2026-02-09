@@ -1,0 +1,10 @@
+[Container]
+ContainerName=victoriametrics
+Exec='-storageDataPath=/storage' '-retentionPeriod=30d' '-httpListenAddr=:8428'
+Image=docker.io/victoriametrics/victoria-metrics:v1.113.0
+Network=monitoring.network
+PublishPort=8428:8428
+Volume=victoriametrics-data.volume:/storage
+
+[Service]
+Restart=always

@@ -1,0 +1,11 @@
+[Container]
+ContainerName=grafana
+Environment=GF_SECURITY_ADMIN_PASSWORD=admin GF_USERS_ALLOW_SIGN_UP=false
+Image=docker.io/grafana/grafana:11.5.2
+Network=monitoring.network
+PublishPort=3000:3000
+Volume=grafana-data.volume:/var/lib/grafana
+Volume=/etc/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+
+[Service]
+Restart=always

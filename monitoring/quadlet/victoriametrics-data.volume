@@ -1,0 +1,5 @@
+[Volume]
+Device=/data/monitoring/victoriametrics
+Driver=local
+Options=bind
+Type=none

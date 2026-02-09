@@ -1,0 +1,5 @@
+[Volume]
+Device=/data/monitoring/loki
+Driver=local
+Options=bind
+Type=none

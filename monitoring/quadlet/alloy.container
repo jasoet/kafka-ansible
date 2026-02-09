@@ -1,0 +1,13 @@
+[Container]
+ContainerName=alloy
+Exec=run /etc/alloy/config.alloy '--storage.path=/var/lib/alloy/data'
+Image=docker.io/grafana/alloy:v1.6.1
+Network=monitoring.network
+PodmanArgs=--pid host
+PublishPort=12345:12345
+Volume=/etc/monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+Volume=/proc:/host/proc:ro
+Volume=/sys:/host/sys:ro
+
+[Service]
+Restart=always

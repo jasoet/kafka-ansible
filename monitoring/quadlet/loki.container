@@ -1,0 +1,11 @@
+[Container]
+ContainerName=loki
+Exec='-config.file=/etc/loki/config.yaml'
+Image=docker.io/grafana/loki:3.4.2
+Network=monitoring.network
+PublishPort=3100:3100
+Volume=loki-data.volume:/loki
+Volume=/etc/monitoring/loki/config.yaml:/etc/loki/config.yaml:ro
+
+[Service]
+Restart=always
