@@ -56,14 +56,20 @@ tasks:
       - uv run ansible-playbook -i {{.INVENTORY_CLUSTER}} playbooks/kafka.yml
 
   verify:
-    desc: Verify test cluster
+    desc: Verify Kafka cluster
     cmds:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
 
+  verify:monitoring:
+    desc: Verify monitoring stack and pipeline
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify-monitoring.yml
+
   full:
-    desc: "Full test cycle (up → deploy Kafka → deploy monitoring → verify)"
+    desc: "Full test cycle (up → deploy Kafka → deploy monitoring → verify all)"
     cmds:
       - task: up
       - task: deploy
       - task: deploy:monitoring
       - task: verify
+      - task: verify:monitoring

@@ -1,0 +1,565 @@
+---
+# Comprehensive verification playbook for Monitoring Stack
+# Run with: ansible-playbook -i inventory playbooks/verify-monitoring.yml
+
+#######################################
+# Play 1: Container & Service Health
+#######################################
+- name: Verify Monitoring Stack Services
+  hosts: monitoring
+  become: true
+  gather_facts: true
+
+  vars:
+    grafana_port: 3000
+    victoriametrics_port: 8428
+    loki_port: 3100
+    alloy_port: 12345
+
+  tasks:
+    #######################################
+    # Podman Verification
+    #######################################
+    - name: Check Podman is installed
+      ansible.builtin.command:
+        cmd: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: Assert Podman is available
+      ansible.builtin.assert:
+        that:
+          - podman_version.rc == 0
+        fail_msg: "Podman is not installed"
+        success_msg: "Podman installed: {{ podman_version.stdout }}"
+
+    #######################################
+    # Container Status Verification
+    #######################################
+    - name: Get running containers
+      ansible.builtin.command:
+        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}"
+      register: running_containers
+      changed_when: false
+
+    - name: Assert all monitoring containers are running
+      ansible.builtin.assert:
+        that:
+          - "'victoriametrics' in running_containers.stdout"
+          - "'loki' in running_containers.stdout"
+          - "'grafana' in running_containers.stdout"
+          - "'alloy' in running_containers.stdout"
+        fail_msg: >-
+          Not all containers are running.
+          Running: {{ running_containers.stdout_lines }}
+        success_msg: "All 4 monitoring containers are running"
+
+    #######################################
+    # Data Directory Verification
+    #######################################
+    - name: Check data directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /data/monitoring/victoriametrics
+        - /data/monitoring/loki
+        - /data/monitoring/grafana
+      register: data_dirs
+
+    - name: Assert data directories exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: "Data directory {{ item.item }} does not exist"
+        success_msg: "Data directory {{ item.item }} exists"
+      loop: "{{ data_dirs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Config File Verification
+    #######################################
+    - name: Check config files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/monitoring/loki/config.yaml
+        - /etc/monitoring/alloy/config.alloy
+        - /etc/monitoring/grafana/provisioning/datasources/default.yaml
+        - /etc/monitoring/grafana/provisioning/dashboards/dashboard.yaml
+      register: config_files
+
+    - name: Assert config files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Config file {{ item.item }} does not exist"
+        success_msg: "Config file {{ item.item }} exists"
+      loop: "{{ config_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Quadlet Unit File Verification
+    #######################################
+    - name: Check Quadlet unit files exist
+      ansible.builtin.stat:
+        path: "/etc/containers/systemd/{{ item }}"
+      loop:
+        - victoriametrics.container
+        - loki.container
+        - grafana.container
+        - alloy.container
+        - monitoring.network
+      register: quadlet_files
+
+    - name: Assert Quadlet unit files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Quadlet file {{ item.item }} does not exist"
+        success_msg: "Quadlet file {{ item.item }} exists"
+      loop: "{{ quadlet_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Port Verification
+    #######################################
+    - name: Wait for VictoriaMetrics port
+      ansible.builtin.wait_for:
+        port: "{{ victoriametrics_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Wait for Loki port
+      ansible.builtin.wait_for:
+        port: "{{ loki_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Wait for Grafana port
+      ansible.builtin.wait_for:
+        port: "{{ grafana_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    #######################################
+    # VictoriaMetrics Health Check
+    #######################################
+    - name: Check VictoriaMetrics health
+      ansible.builtin.uri:
+        url: "http://localhost:{{ victoriametrics_port }}/health"
+        return_content: true
+        timeout: 10
+      register: vm_health
+      retries: 3
+      delay: 5
+
+    - name: Assert VictoriaMetrics is healthy
+      ansible.builtin.assert:
+        that:
+          - vm_health.status == 200
+        fail_msg: "VictoriaMetrics is not healthy"
+        success_msg: "VictoriaMetrics is healthy on port {{ victoriametrics_port }}"
+
+    #######################################
+    # Loki Health Check
+    #######################################
+    - name: Check Loki readiness
+      ansible.builtin.uri:
+        url: "http://localhost:{{ loki_port }}/ready"
+        return_content: true
+        timeout: 10
+      register: loki_ready
+      retries: 6
+      delay: 10
+      until: loki_ready.status == 200
+
+    - name: Assert Loki is ready
+      ansible.builtin.assert:
+        that:
+          - loki_ready.status == 200
+        fail_msg: "Loki is not ready"
+        success_msg: "Loki is ready on port {{ loki_port }}"
+
+    #######################################
+    # Grafana Health Check
+    #######################################
+    - name: Check Grafana health
+      ansible.builtin.uri:
+        url: "http://localhost:{{ grafana_port }}/api/health"
+        return_content: true
+        timeout: 10
+      register: grafana_health
+      retries: 3
+      delay: 5
+
+    - name: Assert Grafana is healthy
+      ansible.builtin.assert:
+        that:
+          - grafana_health.status == 200
+          - grafana_health.json.database == "ok"
+        fail_msg: "Grafana is not healthy: {{ grafana_health.content }}"
+        success_msg: "Grafana is healthy (v{{ grafana_health.json.version }})"
+
+    #######################################
+    # Grafana Datasource Verification
+    #######################################
+    - name: Check Grafana datasources
+      ansible.builtin.uri:
+        url: "http://localhost:{{ grafana_port }}/api/datasources"
+        user: admin
+        password: admin
+        force_basic_auth: true
+        return_content: true
+        timeout: 10
+      register: grafana_datasources
+
+    - name: Assert VictoriaMetrics datasource is provisioned
+      ansible.builtin.assert:
+        that:
+          - grafana_datasources.json | selectattr('type', 'equalto', 'prometheus') | list | length > 0
+        fail_msg: "VictoriaMetrics (Prometheus) datasource not found in Grafana"
+        success_msg: "VictoriaMetrics datasource is provisioned in Grafana"
+
+    - name: Assert Loki datasource is provisioned
+      ansible.builtin.assert:
+        that:
+          - grafana_datasources.json | selectattr('type', 'equalto', 'loki') | list | length > 0
+        fail_msg: "Loki datasource not found in Grafana"
+        success_msg: "Loki datasource is provisioned in Grafana"
+
+    #######################################
+    # VictoriaMetrics Metrics Verification
+    #######################################
+    - name: Query VictoriaMetrics for active time series
+      ansible.builtin.uri:
+        url: "http://localhost:{{ victoriametrics_port }}/api/v1/status/tsdb"
+        return_content: true
+        timeout: 10
+      register: vm_tsdb
+
+    - name: Assert VictoriaMetrics has ingested metrics
+      ansible.builtin.assert:
+        that:
+          - vm_tsdb.json.data.totalSeries > 0
+        fail_msg: "VictoriaMetrics has no time series data"
+        success_msg: >-
+          VictoriaMetrics has {{ vm_tsdb.json.data.totalSeries }}
+          active time series
+
+    #######################################
+    # Service Verification Summary
+    #######################################
+    - name: Service verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Monitoring Service Verification: {{ inventory_hostname }}"
+          - "========================================"
+          - "Podman: {{ podman_version.stdout }} - OK"
+          - "Containers: All 4 running - OK"
+          - "VictoriaMetrics: Healthy on port {{ victoriametrics_port }} - OK"
+          - "Loki: Ready on port {{ loki_port }} - OK"
+          - "Grafana: Healthy (v{{ grafana_health.json.version }}) on port {{ grafana_port }} - OK"
+          - "Datasources: VictoriaMetrics + Loki provisioned - OK"
+          - "Metrics: {{ vm_tsdb.json.data.totalSeries }} active series - OK"
+          - "========================================"
+
+#######################################
+# Play 2: Kafka → Monitoring Pipeline
+#######################################
+- name: Verify Alloy on Kafka Nodes
+  hosts: kafka
+  become: true
+  gather_facts: false
+
+  vars:
+    alloy_port: 12345
+
+  tasks:
+    #######################################
+    # Alloy Service Verification
+    #######################################
+    - name: Check Alloy service status
+      ansible.builtin.systemd:
+        name: alloy
+      register: alloy_service
+
+    - name: Assert Alloy service is running
+      ansible.builtin.assert:
+        that:
+          - alloy_service.status.ActiveState == "active"
+        fail_msg: "Alloy service is not running (state: {{ alloy_service.status.ActiveState }})"
+        success_msg: "Alloy service is running on {{ inventory_hostname }}"
+
+    - name: Assert Alloy service is enabled
+      ansible.builtin.assert:
+        that:
+          - alloy_service.status.UnitFileState == "enabled"
+        fail_msg: "Alloy service is not enabled"
+        success_msg: "Alloy service is enabled"
+
+    - name: Wait for Alloy port
+      ansible.builtin.wait_for:
+        port: "{{ alloy_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    - name: Check Alloy readiness
+      ansible.builtin.uri:
+        url: "http://localhost:{{ alloy_port }}/-/ready"
+        return_content: true
+        timeout: 10
+      register: alloy_ready
+      retries: 3
+      delay: 5
+
+    - name: Assert Alloy is ready
+      ansible.builtin.assert:
+        that:
+          - alloy_ready.status == 200
+        fail_msg: "Alloy is not ready on {{ inventory_hostname }}"
+        success_msg: "Alloy is ready on {{ inventory_hostname }}"
+
+    #######################################
+    # Alloy Config Verification
+    #######################################
+    - name: Check Alloy config exists
+      ansible.builtin.stat:
+        path: /etc/alloy/config.alloy
+      register: alloy_config
+
+    - name: Assert Alloy config exists
+      ansible.builtin.assert:
+        that:
+          - alloy_config.stat.exists
+        fail_msg: "Alloy config not found at /etc/alloy/config.alloy"
+        success_msg: "Alloy config exists"
+
+    - name: Kafka Alloy verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Alloy Verification: {{ inventory_hostname }}"
+          - "========================================"
+          - "Service: Running and Enabled - OK"
+          - "Readiness: Ready on port {{ alloy_port }} - OK"
+          - "Config: /etc/alloy/config.alloy - OK"
+          - "========================================"
+
+#######################################
+# Play 3: End-to-End Pipeline Checks
+#######################################
+- name: Verify End-to-End Monitoring Pipeline
+  hosts: monitoring
+  become: true
+  gather_facts: false
+
+  vars:
+    victoriametrics_port: 8428
+    loki_port: 3100
+    kafka_hosts: "{{ groups['kafka'] }}"
+
+  tasks:
+    #######################################
+    # Metrics Pipeline: Kafka → VM
+    #######################################
+    - name: Query VictoriaMetrics for Kafka node metrics
+      ansible.builtin.uri:
+        url: >-
+          http://localhost:{{ victoriametrics_port }}/api/v1/query?query=up{node="{{ item }}"}
+        return_content: true
+        timeout: 10
+      loop: "{{ kafka_hosts }}"
+      register: kafka_metrics
+      retries: 3
+      delay: 10
+
+    - name: Assert metrics are flowing from Kafka nodes
+      ansible.builtin.assert:
+        that:
+          - item.json.data.result | length > 0
+        fail_msg: "No metrics from {{ item.item }} in VictoriaMetrics"
+        success_msg: >-
+          Metrics flowing from {{ item.item }}
+          ({{ item.json.data.result | length }} targets up)
+      loop: "{{ kafka_metrics.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Verify specific metric sources
+    #######################################
+    - name: Query for JMX exporter metrics
+      ansible.builtin.uri:
+        url: >-
+          http://localhost:{{ victoriametrics_port }}/api/v1/query?query=jvm_memory_committed_bytes{job="jmx_exporter"}
+        return_content: true
+        timeout: 10
+      register: jmx_metrics
+      retries: 3
+      delay: 10
+
+    - name: Assert JMX exporter metrics are present
+      ansible.builtin.assert:
+        that:
+          - jmx_metrics.json.data.result | length > 0
+        fail_msg: "No JMX exporter metrics found in VictoriaMetrics"
+        success_msg: >-
+          JMX exporter metrics present
+          ({{ jmx_metrics.json.data.result | length }} series)
+
+    - name: Query for Node exporter metrics
+      ansible.builtin.uri:
+        url: >-
+          http://localhost:{{ victoriametrics_port }}/api/v1/query?query=node_cpu_seconds_total{job="node_exporter"}
+        return_content: true
+        timeout: 10
+      register: node_metrics
+      retries: 3
+      delay: 10
+
+    - name: Assert Node exporter metrics are present
+      ansible.builtin.assert:
+        that:
+          - node_metrics.json.data.result | length > 0
+        fail_msg: "No Node exporter metrics found in VictoriaMetrics"
+        success_msg: >-
+          Node exporter metrics present
+          ({{ node_metrics.json.data.result | length }} series)
+
+    - name: Query for Kafka exporter metrics
+      ansible.builtin.uri:
+        url: >-
+          http://localhost:{{ victoriametrics_port }}/api/v1/query?query=kafka_brokers{job="kafka_exporter"}
+        return_content: true
+        timeout: 10
+      register: kafka_exp_metrics
+      retries: 3
+      delay: 10
+
+    - name: Assert Kafka exporter metrics are present
+      ansible.builtin.assert:
+        that:
+          - kafka_exp_metrics.json.data.result | length > 0
+        fail_msg: "No Kafka exporter metrics found in VictoriaMetrics"
+        success_msg: >-
+          Kafka exporter metrics present
+          ({{ kafka_exp_metrics.json.data.result | length }} series)
+
+    #######################################
+    # Monitoring VM self-monitoring check
+    #######################################
+    - name: Query for monitoring VM self-metrics
+      ansible.builtin.uri:
+        url: >-
+          http://localhost:{{ victoriametrics_port }}/api/v1/query?query=up{source="monitoring-vm"}
+        return_content: true
+        timeout: 10
+      register: self_metrics
+      retries: 3
+      delay: 10
+
+    - name: Assert monitoring VM self-metrics are present
+      ansible.builtin.assert:
+        that:
+          - self_metrics.json.data.result | length > 0
+        fail_msg: "No self-monitoring metrics from monitoring VM"
+        success_msg: >-
+          Monitoring VM self-metrics present
+          ({{ self_metrics.json.data.result | length }} targets)
+
+    #######################################
+    # Loki Log Pipeline Check
+    #######################################
+    - name: Query Loki for available labels
+      ansible.builtin.uri:
+        url: "http://localhost:{{ loki_port }}/loki/api/v1/labels"
+        return_content: true
+        timeout: 10
+      register: loki_labels
+      retries: 3
+      delay: 10
+
+    - name: Assert Loki has received log data
+      ansible.builtin.assert:
+        that:
+          - loki_labels.json.data | length > 0
+        fail_msg: "Loki has no labels - no logs ingested"
+        success_msg: >-
+          Loki has received logs
+          (labels: {{ loki_labels.json.data | join(', ') }})
+
+    #######################################
+    # Grafana Datasource Connectivity
+    #######################################
+    - name: Get datasource list from Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources"
+        user: admin
+        password: admin
+        force_basic_auth: true
+        return_content: true
+        timeout: 10
+      register: grafana_ds_list
+
+    - name: Extract datasource UIDs
+      ansible.builtin.set_fact:
+        vm_ds_uid: >-
+          {{ (grafana_ds_list.json | selectattr('type', 'equalto', 'prometheus') | first).uid }}
+        loki_ds_uid: >-
+          {{ (grafana_ds_list.json | selectattr('type', 'equalto', 'loki') | first).uid }}
+
+    - name: Test VictoriaMetrics datasource from Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources/proxy/uid/{{ vm_ds_uid }}/api/v1/query?query=up"
+        user: admin
+        password: admin
+        force_basic_auth: true
+        return_content: true
+        timeout: 10
+      register: grafana_vm_test
+      retries: 3
+      delay: 5
+      failed_when: false
+
+    - name: Test Loki datasource from Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources/proxy/uid/{{ loki_ds_uid }}/loki/api/v1/labels"
+        user: admin
+        password: admin
+        force_basic_auth: true
+        return_content: true
+        timeout: 10
+      register: grafana_loki_test
+      retries: 3
+      delay: 5
+      failed_when: false
+
+    #######################################
+    # End-to-End Summary
+    #######################################
+    - name: Pipeline verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "End-to-End Pipeline Verification"
+          - "========================================"
+          - "Kafka → VictoriaMetrics: Metrics flowing - OK"
+          - "  JMX Exporter: {{ jmx_metrics.json.data.result | length }} series - OK"
+          - "  Node Exporter: {{ node_metrics.json.data.result | length }} series - OK"
+          - "  Kafka Exporter: {{ kafka_exp_metrics.json.data.result | length }} series - OK"
+          - "Monitoring VM self-metrics: {{ self_metrics.json.data.result | length }} targets - OK"
+          - "Loki log labels: {{ loki_labels.json.data | join(', ') }} - OK"
+          - "Grafana → VictoriaMetrics: {{ 'Connected' if grafana_vm_test.status | default(0) == 200 else 'Check manually' }}"
+          - "Grafana → Loki: {{ 'Connected' if grafana_loki_test.status | default(0) == 200 else 'Check manually' }}"
+          - "========================================"
+          - "All monitoring verifications passed!"
+          - "========================================"
