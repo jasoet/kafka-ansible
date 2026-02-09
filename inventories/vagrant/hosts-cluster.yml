@@ -7,15 +7,19 @@ all:
           ansible_host: 192.168.56.11
           kafka_node_id: 1
           kafka_internal_ip: 192.168.56.11
+        kafka-2:
+          ansible_host: 192.168.56.12
+          kafka_node_id: 2
+          kafka_internal_ip: 192.168.56.12
+        kafka-3:
+          ansible_host: 192.168.56.13
+          kafka_node_id: 3
+          kafka_internal_ip: 192.168.56.13
       vars:
         ansible_user: vagrant
         ansible_ssh_private_key_file: "{{ inventory_dir }}/../../tests/vagrant/.vagrant/machines/{{ inventory_hostname }}/virtualbox/private_key"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-        kafka_quorum_voters: "1@192.168.56.11:9093"
-        kafka_default_replication_factor: 1
-        kafka_min_insync_replicas: 1
-        kafka_offsets_topic_replication_factor: 1
-        kafka_transaction_state_log_replication_factor: 1
+        kafka_quorum_voters: "1@192.168.56.11:9093,2@192.168.56.12:9093,3@192.168.56.13:9093"
         alloy_victoriametrics_url: "http://192.168.56.20:8428"
         alloy_loki_url: "http://192.168.56.20:3100"
         alloy_environment: "vagrant"
