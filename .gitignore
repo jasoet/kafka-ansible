@@ -61,6 +61,9 @@ tests/terraform/terraform.tfstate
 tests/terraform/terraform.tfstate.backup
 tests/terraform/terraform.tfvars
 
+# Downloaded binaries
+files/
+
 # Generated test inventory
 inventories/test/hosts.yml
 inventories/lima/hosts.yml

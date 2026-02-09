@@ -16,7 +16,16 @@
     path: "{{ kafka_versioned_dir }}/bin/kafka-server-start.sh"
   register: kafka_installed
 
-# Download directly on each node with fallback mirrors
+# Copy local tarball if provided, otherwise download from mirrors
+- name: Copy Kafka tarball from local path
+  ansible.builtin.copy:
+    src: "{{ kafka_local_tarball }}"
+    dest: "{{ kafka_download_dest }}"
+    mode: "0644"
+  when:
+    - not kafka_installed.stat.exists
+    - kafka_local_tarball | length > 0
+
 - name: Download Kafka tarball (with fallback mirrors)
   ansible.builtin.shell: |
     {% for mirror in kafka_download_mirrors %}
@@ -33,13 +42,9 @@
   args:
     creates: "{{ kafka_download_dest }}"
   register: kafka_download_result
-  when: not kafka_installed.stat.exists
-
-- name: Set permissions on downloaded tarball
-  ansible.builtin.file:
-    path: "{{ kafka_download_dest }}"
-    mode: "0644"
-  when: not kafka_installed.stat.exists
+  when:
+    - not kafka_installed.stat.exists
+    - kafka_local_tarball | length == 0
 
 - name: Create versioned install directory
   ansible.builtin.file:
