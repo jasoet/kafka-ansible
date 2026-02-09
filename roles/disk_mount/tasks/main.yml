@@ -60,7 +60,7 @@
 - name: Check if disk has filesystem
   ansible.builtin.command:
     cmd: "blkid -o value -s TYPE {{ disk_mount_device }}"
-  register: disk_mount_fstype
+  register: disk_mount_detected_fstype
   changed_when: false
   failed_when: false
 
@@ -73,7 +73,7 @@
 
 - name: Format disk if unformatted
   when: >
-    disk_mount_fstype.stdout == "" or
+    disk_mount_detected_fstype.stdout == "" or
     (disk_mount_force_format and disk_mount_mountpoint.stdout == "")
   block:
     - name: Create filesystem on disk
