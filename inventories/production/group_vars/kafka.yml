@@ -20,3 +20,9 @@ kafka_default_replication_factor: 3
 kafka_min_insync_replicas: 2
 kafka_offsets_topic_replication_factor: 3
 kafka_transaction_state_log_replication_factor: 3
+
+# Alloy remote write endpoints
+alloy_victoriametrics_url: "http://<monitoring-vm-private-ip>:8428"
+alloy_loki_url: "http://<monitoring-vm-private-ip>:3100"
+alloy_environment: "production"
+alloy_cluster_name: "kafka-production"
