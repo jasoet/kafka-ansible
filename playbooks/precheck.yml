@@ -237,7 +237,11 @@
 
     - name: Check apt cache update result
       ansible.builtin.set_fact:
-        apt_cache_status: "{{ 'PASS' if apt_update.finished | default(false) and apt_update.failed | default(true) == false else 'TIMEOUT' if not apt_update.finished | default(true) else 'FAIL' }}"
+        apt_cache_status: >-
+          {{ 'PASS' if apt_update.finished | default(false) and
+          apt_update.failed | default(true) == false
+          else 'TIMEOUT' if not apt_update.finished | default(true)
+          else 'FAIL' }}
 
     - name: Record apt cache update result
       ansible.builtin.set_fact:
@@ -442,7 +446,9 @@
         check_results: >-
           {{ check_results | combine({
             'kafka_binary': {
-              'status': 'PASS' if (kafka_script.files | default([]) | length > 0) else kafka_download_status if kafka_download_status in ['TIMEOUT', 'SKIP'] else 'FAIL',
+              'status': ('PASS' if (kafka_script.files | default([]) | length > 0)
+                else kafka_download_status
+                if kafka_download_status in ['TIMEOUT', 'SKIP'] else 'FAIL'),
               'downloaded': kafka_download_status,
               'extracted': (kafka_extract is not failed) if kafka_download_status == 'PASS' and kafka_extract is defined else 'N/A',
               'scripts_found': kafka_script.files | default([]) | length,
@@ -485,7 +491,9 @@
           ================================================================================
           Host:         {{ inventory_hostname }}
           Generated:    {{ report_timestamp }}
-          Overall:      {{ 'PASSED' if not checks_failed else 'FAILED' }} ({{ passed_count }} passed, {{ failed_count }} failed, {{ timeout_count }} timeout, {{ skip_count }} skipped)
+          Overall:      {{ 'PASSED' if not checks_failed else 'FAILED' }}
+                        ({{ passed_count }} passed, {{ failed_count }} failed,
+                        {{ timeout_count }} timeout, {{ skip_count }} skipped)
           ================================================================================
 
           CHECK RESULTS
@@ -590,7 +598,10 @@
 
     - name: Debug - Testing connectivity to other nodes
       ansible.builtin.debug:
-        msg: "Testing connectivity from {{ inventory_hostname }} ({{ hostvars[inventory_hostname]['kafka_internal_ip'] | default(ansible_default_ipv4.address) }}) to other nodes"
+        msg: >-
+          Testing connectivity from {{ inventory_hostname }}
+          ({{ hostvars[inventory_hostname]['kafka_internal_ip']
+          | default(ansible_default_ipv4.address) }}) to other nodes
       when: other_kafka_hosts | length > 0
 
     - name: Display target nodes
@@ -641,7 +652,10 @@
 
     - name: Display broker port results
       ansible.builtin.debug:
-        msg: "Port 9092 {{ item.item.hostname }} ({{ item.item.private_ip }}): {{ 'OK' if item.state | default('') == 'started' else 'NOT LISTENING (expected before deployment)' }}"
+        msg: >-
+          Port 9092 {{ item.item.hostname }} ({{ item.item.private_ip }}):
+          {{ 'OK' if item.state | default('') == 'started'
+          else 'NOT LISTENING (expected before deployment)' }}
       loop: "{{ broker_port_results.results }}"
       loop_control:
         label: "{{ item.item.hostname }}"
@@ -662,7 +676,10 @@
 
     - name: Display controller port results
       ansible.builtin.debug:
-        msg: "Port 9093 {{ item.item.hostname }} ({{ item.item.private_ip }}): {{ 'OK' if item.state | default('') == 'started' else 'NOT LISTENING (expected before deployment)' }}"
+        msg: >-
+          Port 9093 {{ item.item.hostname }} ({{ item.item.private_ip }}):
+          {{ 'OK' if item.state | default('') == 'started'
+          else 'NOT LISTENING (expected before deployment)' }}
       loop: "{{ controller_port_results.results }}"
       loop_control:
         label: "{{ item.item.hostname }}"
