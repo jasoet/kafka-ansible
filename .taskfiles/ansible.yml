@@ -92,3 +92,22 @@ tasks:
     preconditions:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Production inventory not found: {{.INVENTORY}}"
+
+  deploy:monitoring:
+    desc: Deploy monitoring stack
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/monitoring.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}"
+
+  deploy:monitoring:prod:
+    desc: Deploy monitoring to production (requires confirmation)
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/monitoring.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
+    prompt: "Deploy monitoring to PRODUCTION? This will modify production servers."

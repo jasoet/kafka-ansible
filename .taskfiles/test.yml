@@ -3,10 +3,11 @@ version: '3'
 vars:
   VAGRANT_DIR: ./tests/vagrant
   INVENTORY: ./inventories/vagrant/hosts.yml
+  INVENTORY_CLUSTER: ./inventories/vagrant/hosts-cluster.yml
 
 tasks:
   up:
-    desc: Create test VMs
+    desc: "Create test VMs (default: 1 Kafka + monitoring. Use KAFKA_NODES=3 for cluster)"
     dir: "{{.VAGRANT_DIR}}"
     env:
       VAGRANT_EXPERIMENTAL: disks
@@ -28,10 +29,10 @@ tasks:
       - vagrant halt
 
   ssh:
-    desc: "SSH into a test VM (usage: task test:ssh -- 1)"
+    desc: "SSH into a test VM (usage: task test:ssh -- kafka-1)"
     dir: "{{.VAGRANT_DIR}}"
     cmds:
-      - vagrant ssh kafka-{{.CLI_ARGS | default "1"}}
+      - vagrant ssh {{.CLI_ARGS | default "kafka-1"}}
 
   status:
     desc: Show test VM status
@@ -44,14 +45,25 @@ tasks:
     cmds:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/kafka.yml
 
+  deploy:monitoring:
+    desc: Deploy monitoring stack to test VM
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/monitoring.yml
+
+  deploy:cluster:
+    desc: Deploy 3-node Kafka cluster (requires KAFKA_NODES=3 task test:up)
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY_CLUSTER}} playbooks/kafka.yml
+
   verify:
     desc: Verify test cluster
     cmds:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify.yml
 
   full:
-    desc: Full test cycle (up → deploy → verify)
+    desc: "Full test cycle (up → deploy Kafka → deploy monitoring → verify)"
     cmds:
       - task: up
       - task: deploy
+      - task: deploy:monitoring
       - task: verify
