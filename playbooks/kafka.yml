@@ -12,7 +12,10 @@
 
     - name: Display target node info
       ansible.builtin.debug:
-        msg: "Setting up Kafka node {{ kafka_node_id }} on {{ ansible_facts['hostname'] }} ({{ ansible_facts['default_ipv4']['address'] | default('unknown') }})"
+        msg: >-
+          Setting up Kafka node {{ kafka_node_id }}
+          on {{ ansible_facts['hostname'] }}
+          ({{ ansible_facts['default_ipv4']['address'] | default('unknown') }})
 
   roles:
     - role: java

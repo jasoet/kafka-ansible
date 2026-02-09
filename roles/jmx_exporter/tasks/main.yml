@@ -15,10 +15,10 @@
     group: "{{ kafka_group | default('kafka') }}"
     mode: "0644"
     timeout: 120
-  register: jmx_download_result
+  register: jmx_exporter_download_result
   retries: 3
   delay: 5
-  until: jmx_download_result is succeeded
+  until: jmx_exporter_download_result is succeeded
 
 - name: Deploy JMX exporter configuration
   ansible.builtin.template:
@@ -31,12 +31,12 @@
 
 - name: Set JMX exporter Java agent options fact
   ansible.builtin.set_fact:
-    kafka_jmx_opts: "-javaagent:{{ jmx_exporter_install_dir }}/{{ jmx_exporter_jar }}={{ jmx_exporter_port }}:{{ jmx_exporter_config_file }}"
+    jmx_exporter_kafka_jmx_opts: "-javaagent:{{ jmx_exporter_install_dir }}/{{ jmx_exporter_jar }}={{ jmx_exporter_port }}:{{ jmx_exporter_config_file }}"
 
 - name: Update Kafka systemd service with JMX options
   ansible.builtin.lineinfile:
     path: /etc/systemd/system/kafka.service
     regexp: '^Environment="KAFKA_OPTS='
-    line: 'Environment="KAFKA_OPTS={{ kafka_jmx_opts }}"'
+    line: 'Environment="KAFKA_OPTS={{ jmx_exporter_kafka_jmx_opts }}"'
     insertafter: '^Environment="KAFKA_JVM_PERFORMANCE_OPTS='
   notify: Restart kafka
