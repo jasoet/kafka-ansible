@@ -1,0 +1,53 @@
+// ============================================
+// Alloy config for Monitoring VM
+// Self-monitoring: scrapes VM, Loki, Grafana, VictoriaMetrics
+// ============================================
+
+// --- Node Exporter integration (built-in) ---
+prometheus.exporter.unix "host" {
+  procfs_path    = "/host/proc"
+  sysfs_path     = "/host/sys"
+}
+
+prometheus.scrape "host_metrics" {
+  targets    = prometheus.exporter.unix.host.targets
+  forward_to = [prometheus.remote_write.victoriametrics.receiver]
+
+  scrape_interval = "15s"
+}
+
+// --- Scrape monitoring stack metrics ---
+prometheus.scrape "monitoring_stack" {
+  targets = [
+    {"__address__" = "victoriametrics:8428", "job" = "victoriametrics"},
+    {"__address__" = "loki:3100",            "job" = "loki"},
+    {"__address__" = "grafana:3000",         "job" = "grafana"},
+  ]
+  forward_to = [prometheus.remote_write.victoriametrics.receiver]
+
+  scrape_interval = "15s"
+  metrics_path    = "/metrics"
+}
+
+// --- Remote write to VictoriaMetrics ---
+prometheus.remote_write "victoriametrics" {
+  endpoint {
+    url = "http://victoriametrics:8428/api/v1/write"
+  }
+
+  external_labels = {
+    source = "monitoring-vm",
+  }
+}
+
+// --- Loki log shipping ---
+loki.source.journal "containers" {
+  forward_to = [loki.write.loki.receiver]
+  labels     = {source = "journal", host = "monitoring-vm"}
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
