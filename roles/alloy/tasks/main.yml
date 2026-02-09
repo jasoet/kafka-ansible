@@ -1,0 +1,111 @@
+---
+- name: Create alloy group
+  ansible.builtin.group:
+    name: "{{ alloy_group }}"
+    system: true
+    state: present
+
+- name: Create alloy user
+  ansible.builtin.user:
+    name: "{{ alloy_user }}"
+    group: "{{ alloy_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ alloy_install_dir }}"
+    create_home: false
+    state: present
+
+- name: Add alloy user to adm group for log access
+  ansible.builtin.user:
+    name: "{{ alloy_user }}"
+    groups: adm
+    append: true
+
+- name: Create Alloy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ alloy_user }}"
+    group: "{{ alloy_group }}"
+    mode: "0755"
+  loop:
+    - "{{ alloy_install_dir }}"
+    - "{{ alloy_config_dir }}"
+    - "{{ alloy_data_dir }}"
+
+- name: Check if Alloy is already installed
+  ansible.builtin.stat:
+    path: "{{ alloy_install_dir }}/alloy"
+  register: alloy_installed
+
+- name: Install unzip
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not alloy_installed.stat.exists
+
+- name: Download Alloy
+  ansible.builtin.get_url:
+    url: "{{ alloy_download_url }}"
+    dest: "/tmp/alloy.zip"
+    mode: "0644"
+    timeout: 120
+  register: alloy_download_result
+  retries: 3
+  delay: 5
+  until: alloy_download_result is succeeded
+  when: not alloy_installed.stat.exists
+
+- name: Extract Alloy
+  ansible.builtin.unarchive:
+    src: "/tmp/alloy.zip"
+    dest: "{{ alloy_install_dir }}"
+    remote_src: true
+    owner: "{{ alloy_user }}"
+    group: "{{ alloy_group }}"
+  when: not alloy_installed.stat.exists
+
+- name: Rename Alloy binary
+  ansible.builtin.copy:
+    src: "{{ alloy_install_dir }}/alloy-linux-{{ alloy_arch }}"
+    dest: "{{ alloy_install_dir }}/alloy"
+    remote_src: true
+    owner: "{{ alloy_user }}"
+    group: "{{ alloy_group }}"
+    mode: "0755"
+  when: not alloy_installed.stat.exists
+
+- name: Clean up downloaded archive and extracted binary
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/alloy.zip"
+    - "{{ alloy_install_dir }}/alloy-linux-{{ alloy_arch }}"
+
+- name: Deploy Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_config_dir }}/config.alloy"
+    owner: "{{ alloy_user }}"
+    group: "{{ alloy_group }}"
+    mode: "0644"
+  notify: Restart alloy
+
+- name: Deploy Alloy systemd service
+  ansible.builtin.template:
+    src: alloy.service.j2
+    dest: /etc/systemd/system/alloy.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart alloy
+
+- name: Enable and start Alloy service
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+    daemon_reload: true

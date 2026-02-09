@@ -1,0 +1,53 @@
+// {{ ansible_managed }}
+// ============================================
+// Alloy config for Kafka node: {{ inventory_hostname }}
+// Scrapes local exporters + ships Kafka logs
+// ============================================
+
+// --- Scrape local exporters ---
+{% for target in alloy_scrape_targets %}
+prometheus.scrape "{{ target.job }}" {
+  targets    = [{"__address__" = "{{ target.address }}"}]
+  forward_to = [prometheus.remote_write.victoriametrics.receiver]
+
+  scrape_interval = "{{ alloy_scrape_interval }}"
+  job_name        = "{{ target.job }}"
+}
+
+{% endfor %}
+// --- Remote write to VictoriaMetrics ---
+prometheus.remote_write "victoriametrics" {
+  endpoint {
+    url = "{{ alloy_victoriametrics_url }}/api/v1/write"
+  }
+
+  external_labels = {
+    cluster     = "{{ alloy_cluster_name }}",
+    node        = "{{ inventory_hostname }}",
+    environment = "{{ alloy_environment }}",
+  }
+}
+
+// --- Kafka log collection ---
+local.file_match "kafka_logs" {
+  path_targets = [
+    {__path__ = "{{ alloy_kafka_log_path }}/*.log", job = "kafka-logs"},
+  ]
+}
+
+loki.source.file "kafka_logs" {
+  targets    = local.file_match.kafka_logs.targets
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "{{ alloy_loki_url }}/loki/api/v1/push"
+  }
+
+  external_labels = {
+    cluster     = "{{ alloy_cluster_name }}",
+    node        = "{{ inventory_hostname }}",
+    environment = "{{ alloy_environment }}",
+  }
+}

@@ -1,0 +1,41 @@
+---
+alloy_version: "1.6.1"
+alloy_port: 12345
+alloy_user: "alloy"
+alloy_group: "alloy"
+alloy_install_dir: "/opt/alloy"
+alloy_config_dir: "/etc/alloy"
+alloy_data_dir: "/var/lib/alloy"
+
+# Architecture mapping
+alloy_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+
+alloy_arch: "{{ alloy_arch_map[ansible_architecture] | default('amd64') }}"
+
+alloy_download_url: >-
+  https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-linux-{{ alloy_arch }}.zip
+
+# Remote write endpoints (set via inventory group_vars)
+alloy_victoriametrics_url: ""
+alloy_loki_url: ""
+
+# Scrape interval
+alloy_scrape_interval: "15s"
+
+# Kafka log path
+alloy_kafka_log_path: "/opt/kafka/logs"
+
+# Local scrape targets
+alloy_scrape_targets:
+  - job: "node_exporter"
+    address: "localhost:9100"
+  - job: "jmx_exporter"
+    address: "localhost:7071"
+  - job: "kafka_exporter"
+    address: "localhost:9308"
+
+# Labels added to all metrics
+alloy_cluster_name: "kafka"
+alloy_environment: "production"
