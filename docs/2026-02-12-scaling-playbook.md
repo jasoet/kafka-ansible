@@ -227,46 +227,98 @@ Kafka configuration includes parameters that are dynamically calculated from the
 
 Source: `roles/kafka/defaults/main.yml` lines 46-48.
 
-**Procedure (one broker at a time — rolling upgrade):**
+**Procedure — Rolling upgrade, one broker at a time:**
 
-**Step 1:** Pick the broker to upgrade (start with any non-controller-leader)
+> **Critical:** Never upgrade more than one broker simultaneously. The cluster must be fully healthy — zero under-replicated partitions, leaders evenly spread — before moving to the next broker. Rushing this risks data loss.
+
+For a 3-node production cluster, the full procedure is:
+
+```
+Broker 1: stop → resize → reconfigure → start → wait for sync → verify leader spread
+                                                                        │
+                                                              All healthy? ──No──▶ STOP. Investigate.
+                                                                        │
+                                                                       Yes
+                                                                        ▼
+Broker 2: stop → resize → reconfigure → start → wait for sync → verify leader spread
+                                                                        │
+                                                              All healthy? ──No──▶ STOP. Investigate.
+                                                                        │
+                                                                       Yes
+                                                                        ▼
+Broker 3: stop → resize → reconfigure → start → wait for sync → verify leader spread ──▶ Done
+```
+
+---
+
+**Repeat the following steps for each broker, one at a time:**
+
+**Step 1:** Check cluster health before starting
+
+Before touching any broker, confirm the cluster is fully healthy:
+
+```bash
+# From any broker — check for under-replicated partitions (must be zero)
+/opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server <broker>:9092 \
+  --describe \
+  --under-replicated-partitions
+# Expected: no output (all partitions in-sync)
+
+# Check leader distribution across brokers
+/opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server <broker>:9092 \
+  --describe | awk -F'\t' '/Leader:/ {print $4}' | sort | uniq -c | sort -rn
+# Expected: leaders roughly evenly distributed across all brokers
+```
+
+Also confirm in **monitoring** that:
+- No under-replicated partitions
+- Leader count is balanced across brokers
+- No active producer errors from Backend
+- Consumer lag is stable (not growing)
+
+> **Do not proceed if the cluster is not fully healthy.**
 
 **Step 2:** Gracefully stop Kafka on the target broker
+
 ```bash
-# SSH to the broker
+# SSH to the broker being upgraded
 sudo systemctl stop kafka
 ```
 
-**Step 3:** Verify cluster health (remaining brokers)
-```bash
-# From another broker
-/opt/kafka/bin/kafka-metadata.sh --snapshot /data/kafka/__cluster_metadata-0/00000000000000000000.log --cluster-id <cluster-id>
-```
+After stopping, leaders on this broker will be reassigned to the remaining brokers. Monitor:
+- Under-replicated partitions will temporarily appear (expected)
+- Leader re-election completes (check monitoring)
+- Producer/consumer traffic continues on remaining brokers
 
-**Step 4:** Stop the EC2 instance
+**Step 3:** Stop the EC2 instance
+
 ```bash
 aws ec2 stop-instances --instance-ids <instance-id>
 aws ec2 wait instance-stopped --instance-ids <instance-id>
 ```
 
-**Step 5:** Change instance type
+**Step 4:** Change instance type
+
 ```bash
 aws ec2 modify-instance-attribute \
   --instance-id <instance-id> \
   --instance-type <new-type>
 ```
 
-**Step 6:** Start the EC2 instance
+**Step 5:** Start the EC2 instance
+
 ```bash
 aws ec2 start-instances --instance-ids <instance-id>
 aws ec2 wait instance-running --instance-ids <instance-id>
 ```
 
-**Step 7:** Reconfigure Kafka for new resources
+**Step 6:** Reconfigure Kafka for new resources
 
 SSH to the broker and update the two configuration files that contain resource-dependent values.
 
-**7a.** Calculate new values based on the new instance specs:
+**6a.** Calculate new values based on the new instance specs:
 
 ```bash
 # Check new instance resources
@@ -274,12 +326,13 @@ nproc                    # vCPU count
 free -m | grep Mem       # Total memory in MB
 
 # Calculate new values:
-# heap_size   = min(RAM_MB * 0.25, 8192), minimum 1024 — in megabytes
+# heap_size       = min(RAM_MB * 0.25, 8192), minimum 1024 — in megabytes
 # network_threads = max(vCPU / 2, 1), capped at 3
-# io_threads  = max(vCPU * 2, 4), capped at 8
+# io_threads      = max(vCPU * 2, 4), capped at 8
 ```
 
-**7b.** Update `/etc/kafka/server.properties`:
+**6b.** Update `/etc/kafka/server.properties`:
+
 ```bash
 sudo vi /etc/kafka/server.properties
 
@@ -288,7 +341,8 @@ sudo vi /etc/kafka/server.properties
 # num.io.threads=<new_value>
 ```
 
-**7c.** Update `/etc/systemd/system/kafka.service`:
+**6c.** Update `/etc/systemd/system/kafka.service`:
+
 ```bash
 sudo vi /etc/systemd/system/kafka.service
 
@@ -296,22 +350,55 @@ sudo vi /etc/systemd/system/kafka.service
 # Environment="KAFKA_HEAP_OPTS=-Xms<new_heap>m -Xmx<new_heap>m"
 ```
 
-**7d.** Reload systemd and start Kafka:
+**6d.** Reload systemd and start Kafka:
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl start kafka
 ```
 
-**Step 8:** Verify broker rejoins cluster and partitions are in-sync
+**Step 7:** Wait for the broker to fully rejoin and sync
+
 ```bash
-/opt/kafka/bin/kafka-topics.sh \
+# Watch until under-replicated partitions drops to zero
+watch -n 5 '/opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server <broker>:9092 \
   --describe \
-  --under-replicated-partitions
-# Should return no results once fully caught up
+  --under-replicated-partitions'
+# Wait until output is empty — all partitions are in-sync
 ```
 
-**Step 9:** Repeat for remaining brokers (one at a time, wait for full sync between each)
+> **Do not proceed to the next broker until this returns zero results.** Depending on data volume, this may take minutes to hours.
+
+**Step 8:** Verify leader spread is balanced
+
+```bash
+# Check leader distribution — should be roughly even across all brokers
+/opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server <broker>:9092 \
+  --describe | awk -F'\t' '/Leader:/ {print $4}' | sort | uniq -c | sort -rn
+```
+
+If leaders are skewed (one broker holds significantly more leaders than others), trigger a preferred leader election:
+
+```bash
+/opt/kafka/bin/kafka-leader-election.sh \
+  --bootstrap-server <broker>:9092 \
+  --election-type preferred \
+  --all-topic-partitions
+```
+
+Also confirm in **monitoring**:
+- Under-replicated partitions = 0
+- Leader count is balanced
+- Producer error rate = 0
+- Consumer lag is stable or decreasing
+
+> **Only proceed to the next broker when all checks pass.**
+
+**Step 9:** Move to the next broker
+
+Repeat Steps 1-8 for the next broker. For a 3-node cluster, the full rolling upgrade requires 3 iterations.
 
 ### Adding Partitions
 
