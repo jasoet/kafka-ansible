@@ -45,19 +45,19 @@
 
 // Heading spacing
 #show heading.where(level: 1): it => {
-  block(above: 2em, below: 1em)[
+  block(above: 1.5em, below: 0.5em)[
     #text(size: 16pt, weight: "bold")[#it]
   ]
 }
 
 #show heading.where(level: 2): it => {
-  block(above: 1.3em, below: 0.8em)[
+  block(above: 1em, below: 0.4em)[
     #text(size: 13pt, weight: "bold")[#it]
   ]
 }
 
 #show heading.where(level: 3): it => {
-  block(above: 1.1em, below: 0.6em)[
+  block(above: 0.8em, below: 0.3em)[
     #text(size: 11pt, weight: "bold")[#it]
   ]
 }
