@@ -1,0 +1,51 @@
+version: '3'
+
+vars:
+  DOCS_DIR: ./docs
+  HEADER: ./docs/header.typ
+  FIX_SCRIPT: ./docs/fix-markdown-for-pdf.py
+  PANDOC_OPTS: >-
+    --pdf-engine=typst
+    --toc
+    --toc-depth=2
+    --syntax-highlighting=idiomatic
+    -H {{.HEADER}}
+    -V mainfont="Arial"
+    -V monofont="Menlo"
+    -V fontsize="10pt"
+    -V papersize="a4"
+    -V margin-left="0.75in"
+    -V margin-right="0.75in"
+    -V margin-top="0.75in"
+    -V margin-bottom="0.75in"
+
+tasks:
+  pdf:
+    desc: "Generate PDF from a markdown file (usage: task docs:pdf -- docs/file.md)"
+    vars:
+      INPUT: "{{.CLI_ARGS}}"
+      OUTPUT:
+        sh: echo "{{.CLI_ARGS}}" | sed 's/\.md$/.pdf/'
+    cmds:
+      - |
+        FIXED=$(python3 {{.FIX_SCRIPT}} "{{.INPUT}}")
+        pandoc "$FIXED" -o "{{.OUTPUT}}" {{.PANDOC_OPTS}}
+        rm -f "$FIXED"
+        echo "Generated {{.OUTPUT}}"
+    preconditions:
+      - sh: "test -f {{.INPUT}}"
+        msg: "File not found: {{.INPUT}}"
+      - sh: "command -v pandoc"
+        msg: "pandoc is not installed"
+      - sh: "command -v typst"
+        msg: "typst is not installed"
+
+  pdf:all:
+    desc: Generate PDFs for all design docs
+    cmds:
+      - task: pdf
+        vars: { CLI_ARGS: "{{.DOCS_DIR}}/2026-02-12-architecture-overview.md" }
+      - task: pdf
+        vars: { CLI_ARGS: "{{.DOCS_DIR}}/2026-02-12-scaling-playbook.md" }
+      - task: pdf
+        vars: { CLI_ARGS: "{{.DOCS_DIR}}/2026-02-09-kafka-infrastructure-monitoring-spec.md" }

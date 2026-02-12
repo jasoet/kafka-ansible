@@ -70,3 +70,6 @@ inventories/lima/hosts.yml
 .ansible/reports/
 reports/
 .task/
+
+# Generated PDFs
+docs/*.pdf

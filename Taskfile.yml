@@ -6,6 +6,7 @@ vars:
 includes:
   ansible: ./.taskfiles/ansible.yml
   test: ./.taskfiles/test.yml
+  docs: ./.taskfiles/docs.yml
 
 tasks:
   default:
