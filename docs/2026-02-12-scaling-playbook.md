@@ -213,6 +213,20 @@ kubectl get pods -A --field-selector=status.phase=Pending
 - Kafka cluster has replication factor ≥ 2 (production: 3)
 - Min in-sync replicas allows one broker to be offline (production: 2 of 3)
 
+**Important — Resource-Dependent Configuration:**
+
+Kafka configuration includes parameters that are dynamically calculated from the host's CPU and memory. After changing instance type, **Ansible must be re-run** on the resized broker to recalculate and apply these values.
+
+| Parameter | Config File | Formula | Example: 8 vCPU / 32GB → 16 vCPU / 64GB |
+|---|---|---|---|
+| `kafka_heap_size` | kafka.service (JVM opts) | 25% of RAM (min 1GB, max 8GB) | 8192m → 8192m (capped at max) |
+| `kafka_num_network_threads` | server.properties | vCPU / 2 (min 1, max 3) | 3 → 3 (capped at max) |
+| `kafka_num_io_threads` | server.properties | vCPU * 2 (min 4, max 8) | 8 → 8 (capped at max) |
+
+> **Note:** With the current formulas, the caps (8GB heap, 3 network threads, 8 IO threads) mean that scaling beyond 16 vCPU / 32GB RAM will not change these values. If you need to tune beyond these caps, override the defaults in the inventory `group_vars`.
+
+Source: `roles/kafka/defaults/main.yml` lines 46-48.
+
 **Procedure (one broker at a time — rolling upgrade):**
 
 **Step 1:** Pick the broker to upgrade (start with any non-controller-leader)
@@ -242,16 +256,53 @@ aws ec2 modify-instance-attribute \
   --instance-type <new-type>
 ```
 
-**Step 6:** Start instance and Kafka
+**Step 6:** Start the EC2 instance
 ```bash
 aws ec2 start-instances --instance-ids <instance-id>
 aws ec2 wait instance-running --instance-ids <instance-id>
+```
 
-# SSH to broker
+**Step 7:** Reconfigure Kafka for new resources
+
+SSH to the broker and update the two configuration files that contain resource-dependent values.
+
+**7a.** Calculate new values based on the new instance specs:
+
+```bash
+# Check new instance resources
+nproc                    # vCPU count
+free -m | grep Mem       # Total memory in MB
+
+# Calculate new values:
+# heap_size   = min(RAM_MB * 0.25, 8192), minimum 1024 — in megabytes
+# network_threads = max(vCPU / 2, 1), capped at 3
+# io_threads  = max(vCPU * 2, 4), capped at 8
+```
+
+**7b.** Update `/etc/kafka/server.properties`:
+```bash
+sudo vi /etc/kafka/server.properties
+
+# Find and update these lines:
+# num.network.threads=<new_value>
+# num.io.threads=<new_value>
+```
+
+**7c.** Update `/etc/systemd/system/kafka.service`:
+```bash
+sudo vi /etc/systemd/system/kafka.service
+
+# Find and update the heap line:
+# Environment="KAFKA_HEAP_OPTS=-Xms<new_heap>m -Xmx<new_heap>m"
+```
+
+**7d.** Reload systemd and start Kafka:
+```bash
+sudo systemctl daemon-reload
 sudo systemctl start kafka
 ```
 
-**Step 7:** Verify broker rejoins cluster and partitions are in-sync
+**Step 8:** Verify broker rejoins cluster and partitions are in-sync
 ```bash
 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server <broker>:9092 \
@@ -260,7 +311,7 @@ sudo systemctl start kafka
 # Should return no results once fully caught up
 ```
 
-**Step 8:** Repeat for remaining brokers (one at a time, wait for full sync between each)
+**Step 9:** Repeat for remaining brokers (one at a time, wait for full sync between each)
 
 ### Adding Partitions
 
