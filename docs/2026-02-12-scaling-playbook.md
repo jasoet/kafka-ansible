@@ -6,8 +6,6 @@ This is the engineer's handbook for scaling the analytics pipeline. Find your sc
 
 All scaling decisions are manual — based on engineer judgment from monitoring data. No auto-scaling is currently configured.
 
----
-
 ## Scaling Philosophy
 
 | Component | Strategy | Rationale |
@@ -16,32 +14,32 @@ All scaling decisions are manual — based on engineer judgment from monitoring 
 | **Backend (producer)** | Scale horizontally via pod replicas, then nodes | Spiky traffic hits the producer first. Pod scaling is fast (~seconds). Node scaling is slower (~minutes). |
 | **Packager (consumer)** | Scale horizontally via pod replicas + partitions | Consumer parallelism is bounded by partition count. Scaling replicas beyond partition count has no effect. |
 
----
-
 ## Scenario Lookup Table
 
 Find your situation, jump to the section.
 
-| # | Scenario | You see in monitoring | Type | Section |
-|---|---|---|---|---|
-| 1 | Backend latency spiking | Request p99 > 500ms, pod CPU > 80% | Scaling | [S1](#s1-backend-latency-spiking) |
-| 2 | Backend can't produce to Kafka | Produce errors, timeouts to brokers | Diagnosis | [S2](#s2-backend-cant-produce-to-kafka) |
-| 3 | Backend pods crashing | OOM-killed, CrashLoopBackOff, frequent restarts | Diagnosis | [S3](#s3-backend-pods-crashing) |
-| 4 | Preparing for traffic spike | Planned campaign or known peak event | Scaling | [S4](#s4-preparing-for-traffic-spike) |
-| 5 | Consumer lag growing | Lag > 500K and increasing, Packager CPU high | Scaling | [S5](#s5-consumer-lag-growing) |
-| 6 | Packager processing slowing | Lag growing but CPU is low, batch time increasing | Diagnosis | [S6](#s6-packager-processing-slowing-down) |
-| 7 | S3 uploads failing | Consuming fine but Parquet files not appearing in S3 | Diagnosis | [S7](#s7-s3-uploads-failing) |
-| 8 | Consumer rebalancing storms | Frequent rebalances, consumption stalls repeatedly | Diagnosis | [S8](#s8-consumer-rebalancing-storms) |
-| 9 | Kafka disk filling up | Broker disk usage > 75% | Scaling | [S9](#s9-kafka-disk-filling-up) |
-| 10 | Kafka broker overloaded | Network > 80%, request queue > 50, high CPU | Scaling | [S10](#s10-kafka-broker-overloaded) |
-| 11 | Kafka JVM under pressure | Heap > 80%, GC pauses > 500ms | Scaling | [S11](#s11-kafka-jvm-under-pressure) |
-| 12 | Pods can't schedule | Pods in Pending state, scheduling failures | Scaling | [S12](#s12-pods-cant-schedule) |
+| Scenario | You see in monitoring | Type | Section |
+|---|---|---|---|
+| Backend latency spiking | Request p99 > 500ms, pod CPU > 80% | Scaling | [BK-1](#bk-1-backend-latency-spiking) |
+| Backend can't produce to Kafka | Produce errors, timeouts to brokers | Diagnosis | [BK-2](#bk-2-backend-cant-produce-to-kafka) |
+| Backend pods crashing | OOM-killed, CrashLoopBackOff, frequent restarts | Diagnosis | [BK-3](#bk-3-backend-pods-crashing) |
+| Preparing for traffic spike | Planned campaign or known peak event | Scaling | [BK-4](#bk-4-preparing-for-traffic-spike) |
+| Consumer lag growing | Lag > 500K and increasing, Packager CPU high | Scaling | [PK-1](#pk-1-consumer-lag-growing) |
+| Packager processing slowing | Lag growing but CPU is low, batch time increasing | Diagnosis | [PK-2](#pk-2-packager-processing-slowing-down) |
+| S3 uploads failing | Consuming fine but Parquet files not appearing in S3 | Diagnosis | [PK-3](#pk-3-s3-uploads-failing) |
+| Consumer rebalancing storms | Frequent rebalances, consumption stalls repeatedly | Diagnosis | [PK-4](#pk-4-consumer-rebalancing-storms) |
+| Kafka disk filling up | Broker disk usage > 75% | Scaling | [KF-1](#kf-1-kafka-disk-filling-up) |
+| Kafka broker overloaded | Network > 80%, request queue > 50, high CPU | Scaling | [KF-2](#kf-2-kafka-broker-overloaded) |
+| Kafka JVM under pressure | Heap > 80%, GC pauses > 500ms | Scaling | [KF-3](#kf-3-kafka-jvm-under-pressure) |
+| Pods can't schedule | Pods in Pending state, scheduling failures | Scaling | [EKS-1](#eks-1-pods-cant-schedule) |
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Backend Scenarios
 
-### S1: Backend Latency Spiking
+### BK-1: Backend Latency Spiking
 
 **Symptoms:**
 
@@ -56,7 +54,7 @@ kubectl top pods -n <namespace> -l app=backend
 kubectl get deployment backend -n <namespace> -o wide
 ```
 
-Confirm that Kafka produce latency is normal (< 50ms). If produce latency to Kafka is also high, the bottleneck may be Kafka — check [S10](#s10-kafka-broker-overloaded) first.
+Confirm that Kafka produce latency is normal (< 50ms). If produce latency to Kafka is also high, the bottleneck may be Kafka — check [KF-2](#kf-2-kafka-broker-overloaded) first.
 
 **Action — Scale Backend pods:**
 
@@ -74,7 +72,7 @@ Recommended replica counts:
 | High (peak) | 20,000-30,000 | 6-8 |
 | Spike | > 30,000 | 10+ (ensure node capacity) |
 
-If pods are Pending after scaling, see [S12](#s12-pods-cant-schedule).
+If pods are Pending after scaling, see [EKS-1](#eks-1-pods-cant-schedule).
 
 **Verify:**
 
@@ -82,9 +80,11 @@ If pods are Pending after scaling, see [S12](#s12-pods-cant-schedule).
 - Pod CPU drops below 60%
 - No produce errors to Kafka
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S2: Backend Can't Produce to Kafka
+### BK-2: Backend Can't Produce to Kafka
 
 **Symptoms:**
 
@@ -116,8 +116,8 @@ ssh <broker> /opt/kafka/bin/kafka-topics.sh \
 |---|---|
 | Network unreachable | Check security groups, VPC routing — not scaling |
 | Kafka broker is down | Restart broker, investigate root cause |
-| Under-replicated partitions | Broker health issue — see [S10](#s10-kafka-broker-overloaded) or [S11](#s11-kafka-jvm-under-pressure) |
-| Kafka disk full | See [S9](#s9-kafka-disk-filling-up) |
+| Under-replicated partitions | Broker health issue — see [KF-2](#kf-2-kafka-broker-overloaded) or [KF-3](#kf-3-kafka-jvm-under-pressure) |
+| Kafka disk full | See [KF-1](#kf-1-kafka-disk-filling-up) |
 | All checks pass | Check Backend application logs for misconfiguration (wrong broker address, auth issues) |
 
 **Verify:**
@@ -125,9 +125,11 @@ ssh <broker> /opt/kafka/bin/kafka-topics.sh \
 - Produce errors stop
 - Messages flowing through pipeline (check consumer lag is not growing)
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S3: Backend Pods Crashing
+### BK-3: Backend Pods Crashing
 
 **Symptoms:**
 
@@ -152,7 +154,7 @@ kubectl logs <backend-pod> -n <namespace> --previous
 |---|---|
 | OOMKilled | Increase memory limits in deployment spec, or reduce per-pod load by scaling replicas |
 | Application error in logs | Not a scaling issue — fix the application bug |
-| Liveness probe timeout | Pod is overloaded — scale replicas (see [S1](#s1-backend-latency-spiking)), or increase probe timeout |
+| Liveness probe timeout | Pod is overloaded — scale replicas (see [BK-1](#bk-1-backend-latency-spiking)), or increase probe timeout |
 
 **Verify:**
 
@@ -160,9 +162,11 @@ kubectl logs <backend-pod> -n <namespace> --previous
 - No OOMKilled events
 - Request latency normal
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S4: Preparing for Traffic Spike
+### BK-4: Preparing for Traffic Spike
 
 **Symptoms:**
 
@@ -220,11 +224,13 @@ kubectl scale deployment backend -n <namespace> --replicas=<normal-count>
 kubectl scale deployment packager -n <namespace> --replicas=<normal-count>
 ```
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Packager Scenarios
 
-### S5: Consumer Lag Growing
+### PK-1: Consumer Lag Growing
 
 **Symptoms:**
 
@@ -252,7 +258,7 @@ ssh <broker> /opt/kafka/bin/kafka-topics.sh \
 |---|---|
 | Replicas < partition count and CPU is high | Scale Packager pods |
 | Replicas = partition count and CPU is high | Add partitions first ([Appendix C](#appendix-c-adding-kafka-partitions)), then scale pods |
-| CPU is low but lag grows | Not a scaling issue — see [S6](#s6-packager-processing-slowing-down) |
+| CPU is low but lag grows | Not a scaling issue — see [PK-2](#pk-2-packager-processing-slowing-down) |
 
 **Action — Scale Packager pods:**
 
@@ -266,9 +272,11 @@ kubectl scale deployment packager -n <namespace> --replicas=<N>
 - Packager pod CPU returns to normal range
 - Parquet files resuming in S3
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S6: Packager Processing Slowing Down
+### PK-2: Packager Processing Slowing Down
 
 **Symptoms:**
 
@@ -297,7 +305,7 @@ kubectl exec -it <packager-pod> -n <namespace> -- \
 |---|---|
 | External service (DB, API) is slow | Fix the external dependency — not a Packager scaling issue |
 | Data volume per record increased | Application-level optimization needed |
-| S3 uploads slow | See [S7](#s7-s3-uploads-failing) |
+| S3 uploads slow | See [PK-3](#pk-3-s3-uploads-failing) |
 | No obvious cause | Profile the application, check for memory pressure or GC issues in Packager |
 
 **Verify:**
@@ -305,9 +313,11 @@ kubectl exec -it <packager-pod> -n <namespace> -- \
 - Batch processing time returns to baseline
 - Consumer lag decreasing
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S7: S3 Uploads Failing
+### PK-3: S3 Uploads Failing
 
 **Symptoms:**
 
@@ -342,9 +352,11 @@ kubectl exec -it <packager-pod> -n <namespace> -- \
 - S3 upload errors stop in Packager logs
 - Parquet files appearing in S3
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S8: Consumer Rebalancing Storms
+### PK-4: Consumer Rebalancing Storms
 
 **Symptoms:**
 
@@ -373,7 +385,7 @@ ssh <broker> /opt/kafka/bin/kafka-consumer-groups.sh \
 
 | Condition | Action |
 |---|---|
-| Pods restarting (OOMKilled, crashes) | Fix the crash first — see [S3](#s3-backend-pods-crashing) (same approach for Packager) |
+| Pods restarting (OOMKilled, crashes) | Fix the crash first — see [BK-3](#bk-3-backend-pods-crashing) (same approach for Packager) |
 | Processing takes longer than `max.poll.interval.ms` | Increase `max.poll.interval.ms` in consumer config, or reduce `max.poll.records` |
 | Scaling up/down during rebalance | Wait for rebalance to complete before scaling again |
 | Deploying new version | Expected during rollout — wait for stabilization |
@@ -384,11 +396,13 @@ ssh <broker> /opt/kafka/bin/kafka-consumer-groups.sh \
 - Consumer lag is steadily decreasing
 - All partitions assigned in consumer group describe output
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Kafka Scenarios
 
-### S9: Kafka Disk Filling Up
+### KF-1: Kafka Disk Filling Up
 
 **Symptoms:**
 
@@ -410,7 +424,7 @@ ssh <broker> du -sh /data/kafka/* | sort -rh | head -10
 |---|---|
 | Gradual growth, approaching capacity | Expand EBS volume ([Appendix D](#appendix-d-ebs-disk-expansion)) |
 | Sudden spike from one topic | Reduce retention on that topic (see below) |
-| Consumer lag caused data to pile up | Fix the consumer issue first ([S5](#s5-consumer-lag-growing)), then expand disk if needed |
+| Consumer lag caused data to pile up | Fix the consumer issue first ([PK-1](#pk-1-consumer-lag-growing)), then expand disk if needed |
 
 **Action — Reduce retention (temporary relief):**
 
@@ -429,9 +443,11 @@ For permanent fix, expand the disk: [Appendix D](#appendix-d-ebs-disk-expansion)
 - Disk usage below 75%
 - Disk usage trend stabilizing or decreasing
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S10: Kafka Broker Overloaded
+### KF-2: Kafka Broker Overloaded
 
 **Symptoms:**
 
@@ -479,9 +495,11 @@ If the cluster is at capacity even with balanced leaders, vertical scale is need
 - Request queue below 10
 - Leader count evenly distributed across brokers
 
----
+```{=typst}
+#pagebreak()
+```
 
-### S11: Kafka JVM Under Pressure
+### KF-3: Kafka JVM Under Pressure
 
 **Symptoms:**
 
@@ -531,11 +549,13 @@ sudo systemctl restart kafka
 - GC pauses < 100ms
 - No under-replicated partitions after restart
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## EKS Infrastructure Scenarios
 
-### S12: Pods Can't Schedule
+### EKS-1: Pods Can't Schedule
 
 **Symptoms:**
 
@@ -572,7 +592,9 @@ kubectl top nodes
 - New node shows Ready status
 - All pods Running
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Appendix A: Rolling Broker Restart (Vertical Scale)
 
@@ -752,7 +774,9 @@ Confirm in monitoring:
 
 Repeat Steps 1-8. For a 3-node cluster, the full rolling upgrade requires 3 iterations.
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Appendix B: EKS Node Scaling via CloudFormation
 
@@ -810,7 +834,9 @@ aws cloudformation update-stack \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Appendix C: Adding Kafka Partitions
 
@@ -859,7 +885,9 @@ ssh <broker> /opt/kafka/bin/kafka-topics.sh \
 | 30,000-100,000 | 50 | 50 |
 | > 100,000 | 100+ (test first) | 100+ |
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Appendix D: EBS Disk Expansion
 
@@ -911,7 +939,9 @@ sudo xfs_growfs /data/kafka
 df -h /data/kafka
 ```
 
----
+```{=typst}
+#pagebreak()
+```
 
 ## Pending / Future Considerations
 

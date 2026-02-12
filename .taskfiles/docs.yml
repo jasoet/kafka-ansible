@@ -7,7 +7,7 @@ vars:
   PANDOC_OPTS: >-
     --pdf-engine=typst
     --toc
-    --toc-depth=2
+    --toc-depth=3
     --syntax-highlighting=idiomatic
     -H {{.HEADER}}
     -V mainfont="Arial"

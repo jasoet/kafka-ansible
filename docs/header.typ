@@ -35,13 +35,20 @@
   )[#it.body]
 }
 
-// Table header styling
+// Table styling - breakable across pages
+#show figure.where(kind: table): set figure.caption(position: top)
+#show figure.where(kind: table): set block(breakable: true)
 #show table.cell.where(y: 0): set text(weight: "bold")
 #set table(
   inset: 8pt,
   stroke: (paint: rgb("#d0d7de"), thickness: 0.5pt),
   fill: (_, y) => if y == 0 { rgb("#f6f8fa") },
 )
+
+// Horizontal rule spacing
+#show line: it => {
+  block(above: 1.2em, below: 1.2em)[#it]
+}
 
 // Heading spacing
 #show heading.where(level: 1): it => {
@@ -51,13 +58,13 @@
 }
 
 #show heading.where(level: 2): it => {
-  block(above: 1em, below: 0.4em)[
+  block(above: 1.2em, below: 0.6em)[
     #text(size: 13pt, weight: "bold")[#it]
   ]
 }
 
 #show heading.where(level: 3): it => {
-  block(above: 0.8em, below: 0.3em)[
+  block(above: 1em, below: 0.5em)[
     #text(size: 11pt, weight: "bold")[#it]
   ]
 }
