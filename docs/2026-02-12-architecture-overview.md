@@ -81,7 +81,7 @@ Kafka EC2 instances are in the public subnet to allow SSH access during Ansible 
 
 ## EKS Cluster
 
-Managed by **CloudFormation** (`v4.yaml`). The EKS cluster hosts the Backend and Packager services.
+Managed by **CloudFormation** (`cloudformation-eks-cluster.yaml`). The EKS cluster hosts the Backend and Packager services.
 
 ### Cluster Configuration
 
@@ -195,11 +195,11 @@ Managed by **Ansible** (this repository). EC2 instances are provisioned manually
 
 | Component | Managed By | Infra Type | Instance/Resource | Environment |
 |---|---|---|---|---|
-| VPC, Subnets, IGW, NAT | CloudFormation (v4.yaml) | Networking | — | Shared |
-| EKS Control Plane | CloudFormation (v4.yaml) | Managed K8s | — | Shared |
-| EKS Prod Node Group | CloudFormation (v4.yaml) | EC2 (via ASG) | c7g.2xlarge | Production |
-| EKS Staging Node Group | CloudFormation (v4.yaml) | EC2 (via ASG) | t4g.medium | Staging |
-| EFS File System | CloudFormation (v4.yaml) | Managed Storage | — | Shared |
+| VPC, Subnets, IGW, NAT | CloudFormation (cloudformation-eks-cluster.yaml) | Networking | — | Shared |
+| EKS Control Plane | CloudFormation (cloudformation-eks-cluster.yaml) | Managed K8s | — | Shared |
+| EKS Prod Node Group | CloudFormation (cloudformation-eks-cluster.yaml) | EC2 (via ASG) | c7g.2xlarge | Production |
+| EKS Staging Node Group | CloudFormation (cloudformation-eks-cluster.yaml) | EC2 (via ASG) | t4g.medium | Staging |
+| EFS File System | CloudFormation (cloudformation-eks-cluster.yaml) | Managed Storage | — | Shared |
 | Kafka Prod Brokers (x3) | Ansible (kafka-ansible) | EC2 (manual) | Varies | Production |
 | Kafka Staging Broker (x1) | Ansible (kafka-ansible) | EC2 (manual) | Varies | Staging |
 | Monitoring VM | Manual (pending decision) | EC2 (manual) | Varies | Shared |
@@ -220,7 +220,7 @@ Monitoring architecture decision is pending. See [Kafka Infrastructure Monitorin
 
 | Layer | Tool | Source of Truth |
 |---|---|---|
-| VPC, EKS, Networking | AWS CloudFormation | `v4.yaml` |
+| VPC, EKS, Networking | AWS CloudFormation | `cloudformation-eks-cluster.yaml` |
 | Kafka Configuration | Ansible | `kafka-ansible` repository |
 | Kafka EC2 Provisioning | Manual | — |
 | EKS Workloads | kubectl / CI/CD | Application repositories |

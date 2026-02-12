@@ -756,11 +756,11 @@ Repeat Steps 1-8. For a 3-node cluster, the full rolling upgrade requires 3 iter
 
 ## Appendix B: EKS Node Scaling via CloudFormation
 
-> **Note:** The current CloudFormation template (`v4.yaml`) has `DesiredSize`, `MinSize`, and `MaxSize` hardcoded. To change node counts, update the template directly and run a stack update.
+> **Note:** The current CloudFormation template (`cloudformation-eks-cluster.yaml`) has `DesiredSize`, `MinSize`, and `MaxSize` hardcoded. To change node counts, update the template directly and run a stack update.
 
 **Step 1: Update the CloudFormation template**
 
-Edit `v4.yaml` and change the `ScalingConfig` for the target node group:
+Edit `cloudformation-eks-cluster.yaml` and change the `ScalingConfig` for the target node group:
 
 ```yaml
 ScalingConfig:
@@ -774,7 +774,7 @@ ScalingConfig:
 ```bash
 aws cloudformation update-stack \
   --stack-name <stack-name> \
-  --template-body file://v4.yaml \
+  --template-body file://cloudformation-eks-cluster.yaml \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -935,6 +935,6 @@ Adding a 4th+ broker is possible but involves provisioning a new EC2 instance, r
 
 ### CloudFormation Parameterization
 
-The current `v4.yaml` has `DesiredSize`, `MinSize`, and `MaxSize` hardcoded. Parameterizing these values would make node scaling simpler (parameter update instead of template edit).
+The current `cloudformation-eks-cluster.yaml` has `DesiredSize`, `MinSize`, and `MaxSize` hardcoded. Parameterizing these values would make node scaling simpler (parameter update instead of template edit).
 
 **Status:** Recommended improvement for easier operational scaling.
