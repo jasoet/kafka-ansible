@@ -79,8 +79,8 @@
       notify: Restart nginx
 
     - name: Deploy nginx htpasswd
-      ansible.builtin.copy:
-        src: "../redpanda-console/nginx/htpasswd"
+      ansible.builtin.template:
+        src: "../redpanda-console/nginx/htpasswd.j2"
         dest: /etc/redpanda-console/nginx/htpasswd
         owner: root
         group: root
