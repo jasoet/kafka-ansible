@@ -1,0 +1,31 @@
+# Redpanda Console Stack - Source of Truth
+# Convert to Quadlet: podlets compose redpanda-console/compose.yaml
+name: redpanda-console
+
+networks:
+  redpanda-console:
+    driver: bridge
+
+services:
+  console:
+    image: docker.io/redpandadata/console:v3.5.2
+    container_name: console
+    environment:
+      - KAFKA_BROKERS=192.168.56.11:9092
+    networks:
+      - redpanda-console
+    restart: unless-stopped
+
+  nginx:
+    image: docker.io/nginx:alpine
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/htpasswd:/etc/nginx/.htpasswd:ro
+    networks:
+      - redpanda-console
+    depends_on:
+      - console
+    restart: unless-stopped

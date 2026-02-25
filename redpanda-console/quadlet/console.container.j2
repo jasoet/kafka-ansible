@@ -1,0 +1,8 @@
+[Container]
+ContainerName=console
+Environment=KAFKA_BROKERS={{ redpanda_console_kafka_brokers }}
+Image=docker.io/redpandadata/console:v3.5.2
+Network=redpanda-console.network
+
+[Service]
+Restart=always

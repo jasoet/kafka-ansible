@@ -1,0 +1,10 @@
+[Container]
+ContainerName=nginx
+Image=docker.io/nginx:alpine
+Network=redpanda-console.network
+PublishPort=8080:80
+Volume=/etc/redpanda-console/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+Volume=/etc/redpanda-console/nginx/htpasswd:/etc/nginx/.htpasswd:ro
+
+[Service]
+Restart=always

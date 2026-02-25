@@ -1,0 +1,159 @@
+---
+# Verification playbook for Redpanda Console
+# Run with: ansible-playbook -i inventory playbooks/verify-redpanda-console.yml
+
+- name: Verify Redpanda Console
+  hosts: redpanda_console
+  become: true
+  gather_facts: true
+
+  vars:
+    console_port: 8080
+
+  tasks:
+    #######################################
+    # Podman Verification
+    #######################################
+    - name: Check Podman is installed
+      ansible.builtin.command:
+        cmd: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: Assert Podman is available
+      ansible.builtin.assert:
+        that:
+          - podman_version.rc == 0
+        fail_msg: "Podman is not installed"
+        success_msg: "Podman installed: {{ podman_version.stdout }}"
+
+    #######################################
+    # Container Status Verification
+    #######################################
+    - name: Get running containers
+      ansible.builtin.command:
+        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}"
+      register: running_containers
+      changed_when: false
+
+    - name: Assert all Redpanda Console containers are running
+      ansible.builtin.assert:
+        that:
+          - "'console' in running_containers.stdout"
+          - "'nginx' in running_containers.stdout"
+        fail_msg: >-
+          Not all containers are running.
+          Running: {{ running_containers.stdout_lines }}
+        success_msg: "Both containers (console, nginx) are running"
+
+    #######################################
+    # Quadlet Unit File Verification
+    #######################################
+    - name: Check Quadlet unit files exist
+      ansible.builtin.stat:
+        path: "/etc/containers/systemd/{{ item }}"
+      loop:
+        - console.container
+        - nginx.container
+        - redpanda-console.network
+      register: quadlet_files
+
+    - name: Assert Quadlet unit files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Quadlet file {{ item.item }} does not exist"
+        success_msg: "Quadlet file {{ item.item }} exists"
+      loop: "{{ quadlet_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Config File Verification
+    #######################################
+    - name: Check config files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/redpanda-console/nginx/nginx.conf
+        - /etc/redpanda-console/nginx/htpasswd
+      register: config_files
+
+    - name: Assert config files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Config file {{ item.item }} does not exist"
+        success_msg: "Config file {{ item.item }} exists"
+      loop: "{{ config_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    #######################################
+    # Port Verification
+    #######################################
+    - name: Wait for console port
+      ansible.builtin.wait_for:
+        port: "{{ console_port }}"
+        host: 0.0.0.0
+        timeout: 30
+        state: started
+
+    #######################################
+    # Auth Verification - 401 without creds
+    #######################################
+    - name: Test nginx responds with 401 without credentials
+      ansible.builtin.uri:
+        url: "http://localhost:{{ console_port }}"
+        status_code: 401
+        timeout: 10
+      register: no_auth_response
+      retries: 3
+      delay: 5
+
+    - name: Assert nginx requires authentication
+      ansible.builtin.assert:
+        that:
+          - no_auth_response.status == 401
+        fail_msg: "Nginx did not return 401 without credentials (got {{ no_auth_response.status }})"
+        success_msg: "Nginx correctly requires authentication (401)"
+
+    #######################################
+    # Auth Verification - 200 with creds
+    #######################################
+    - name: Test nginx responds with 200 with credentials
+      ansible.builtin.uri:
+        url: "http://localhost:{{ console_port }}"
+        user: redpanda
+        password: redpanda
+        force_basic_auth: true
+        return_content: true
+        timeout: 10
+      register: auth_response
+      retries: 6
+      delay: 10
+      until: auth_response.status == 200
+
+    - name: Assert Redpanda Console is accessible with credentials
+      ansible.builtin.assert:
+        that:
+          - auth_response.status == 200
+        fail_msg: "Redpanda Console not accessible with credentials (got {{ auth_response.status }})"
+        success_msg: "Redpanda Console accessible with basic auth on port {{ console_port }}"
+
+    #######################################
+    # Verification Summary
+    #######################################
+    - name: Verification summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "Redpanda Console Verification: {{ inventory_hostname }}"
+          - "========================================"
+          - "Podman: {{ podman_version.stdout }} - OK"
+          - "Containers: console + nginx running - OK"
+          - "Port {{ console_port }}: Listening - OK"
+          - "Auth: 401 without creds - OK"
+          - "Auth: 200 with creds (redpanda/redpanda) - OK"
+          - "Kafka brokers: {{ redpanda_console_kafka_brokers }}"
+          - "========================================"

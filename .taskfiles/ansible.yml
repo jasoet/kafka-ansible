@@ -111,3 +111,22 @@ tasks:
       - sh: "test -f {{.INVENTORY}}"
         msg: "Production inventory not found: {{.INVENTORY}}"
     prompt: "Deploy monitoring to PRODUCTION? This will modify production servers."
+
+  deploy:redpanda-console:
+    desc: Deploy Redpanda Console
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/redpanda-console.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Inventory file not found: {{.INVENTORY}}"
+
+  deploy:redpanda-console:prod:
+    desc: Deploy Redpanda Console to production (requires confirmation)
+    vars:
+      INVENTORY: ./inventories/production/hosts.yml
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/redpanda-console.yml
+    preconditions:
+      - sh: "test -f {{.INVENTORY}}"
+        msg: "Production inventory not found: {{.INVENTORY}}"
+    prompt: "Deploy Redpanda Console to PRODUCTION? This will modify production servers."

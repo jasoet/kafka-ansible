@@ -1,0 +1,137 @@
+---
+- name: Setup Redpanda Console
+  hosts: redpanda_console
+  become: true
+
+  pre_tasks:
+    - name: Gather hardware and network facts
+      ansible.builtin.setup:
+        gather_subset:
+          - hardware
+          - network
+
+    - name: Display target node info
+      ansible.builtin.debug:
+        msg: "Setting up Redpanda Console on {{ ansible_facts['hostname'] }} ({{ ansible_facts['default_ipv4']['address'] | default('unknown') }})"
+
+    - name: Install Podman
+      ansible.builtin.apt:
+        name:
+          - podman
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+  tasks:
+    - name: Create Quadlet config directory
+      ansible.builtin.file:
+        path: /etc/containers/systemd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Redpanda Console config directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/redpanda-console
+        - /etc/redpanda-console/nginx
+
+    - name: Deploy Quadlet network file
+      ansible.builtin.copy:
+        src: "../redpanda-console/quadlet/redpanda-console.network"
+        dest: /etc/containers/systemd/redpanda-console.network
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Deploy Quadlet nginx container file
+      ansible.builtin.copy:
+        src: "../redpanda-console/quadlet/nginx.container"
+        dest: /etc/containers/systemd/nginx.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nginx
+
+    - name: Deploy Quadlet console container file from template
+      ansible.builtin.template:
+        src: "../redpanda-console/quadlet/console.container.j2"
+        dest: /etc/containers/systemd/console.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart console
+
+    - name: Deploy nginx configuration
+      ansible.builtin.copy:
+        src: "../redpanda-console/nginx/nginx.conf"
+        dest: /etc/redpanda-console/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nginx
+
+    - name: Deploy nginx htpasswd
+      ansible.builtin.copy:
+        src: "../redpanda-console/nginx/htpasswd"
+        dest: /etc/redpanda-console/nginx/htpasswd
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nginx
+
+    - name: Reload systemd and start services
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Pull container images
+      ansible.builtin.command:
+        cmd: "podman pull {{ item }}"
+      loop:
+        - docker.io/redpandadata/console:v3.5.2
+        - docker.io/nginx:alpine
+      register: pull_result
+      changed_when: "'Already exists' not in pull_result.stdout"
+      retries: 3
+      delay: 5
+      until: pull_result is succeeded
+
+    - name: Start Quadlet services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+        daemon_reload: true
+      loop:
+        - console
+        - nginx
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart console
+      ansible.builtin.systemd:
+        name: console
+        state: restarted
+
+    - name: Restart nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+
+  post_tasks:
+    - name: Display Redpanda Console status
+      ansible.builtin.debug:
+        msg:
+          - "Redpanda Console setup complete on {{ ansible_facts['hostname'] }}"
+          - "Console UI: http://{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}:8080 (redpanda/redpanda)"
+          - "Kafka brokers: {{ redpanda_console_kafka_brokers }}"

@@ -65,11 +65,23 @@ tasks:
     cmds:
       - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify-monitoring.yml
 
+  deploy:redpanda-console:
+    desc: Deploy Redpanda Console to test VM
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/redpanda-console.yml
+
+  verify:redpanda-console:
+    desc: Verify Redpanda Console deployment
+    cmds:
+      - uv run ansible-playbook -i {{.INVENTORY}} playbooks/verify-redpanda-console.yml
+
   full:
-    desc: "Full test cycle (up → deploy Kafka → deploy monitoring → verify all)"
+    desc: "Full test cycle (up → deploy Kafka → deploy monitoring → deploy console → verify all)"
     cmds:
       - task: up
       - task: deploy
       - task: deploy:monitoring
+      - task: deploy:redpanda-console
       - task: verify
       - task: verify:monitoring
+      - task: verify:redpanda-console
